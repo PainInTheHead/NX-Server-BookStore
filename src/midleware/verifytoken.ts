@@ -1,4 +1,3 @@
-import { Todo } from "../entity/todo.entity";
 import { myDataSource } from "./../../app-data-source";
 import { Request, Response, NextFunction } from "express";
 import * as jwt from "jsonwebtoken";

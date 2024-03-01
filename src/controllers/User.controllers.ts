@@ -9,7 +9,7 @@ const userRepo = myDataSource.getRepository(User);
 export const userRegister = async function (req: Request, res: Response) {
   const { email, password } = req.body;
   try {
-    const newUser = userRepo.findOneBy({ email: email });
+    const newUser = await userRepo.findOneBy({ email: email });
     if (newUser) {
       return res
         .status(409)
@@ -47,9 +47,13 @@ export const userLogin = async function (req: Request, res: Response) {
       "dev-jwt",
       { expiresIn: 60 * 60 }
     );
-    return res
-      .status(200)
-      .json({ token: `Bearer ${token}`, id: user.id, avatar: user.avatar });
+    return res.status(200).json({
+      token: `Bearer ${token}`,
+      id: user.id,
+      avatar: user.avatar,
+      userName: user.userName,
+      email: user.email,
+    });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Внутренняя ошибка сервера" });
@@ -61,9 +65,10 @@ export const getUser = async function (req: RequestWithUser, res: Response) {
   try {
     const user = await userRepo.findOneBy({ id: userFromToken.id });
     if (!user) {
-      return 
+      return;
     }
-    res.json(user);
+    const { userName, email, avatar, id } = user;
+    res.json({ userName, email, avatar, id });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Внутренняя ошибка сервера" });
