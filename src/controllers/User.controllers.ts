@@ -4,7 +4,11 @@ import { Request, Response } from "express";
 import * as bcrypt from "bcryptjs";
 const jwt = require("jsonwebtoken");
 import { RequestWithUser } from "../Types/req.user";
+import * as fs from "fs";
 const userRepo = myDataSource.getRepository(User);
+const path = require("path");
+
+const salt = bcrypt.genSaltSync(10);
 
 export const userRegister = async function (req: Request, res: Response) {
   const { email, password } = req.body;
@@ -15,7 +19,7 @@ export const userRegister = async function (req: Request, res: Response) {
         .status(409)
         .json({ message: "this email in now moment is be registed" });
     }
-    const salt = bcrypt.genSaltSync(10);
+    // const salt = bcrypt.genSaltSync(10);
     const user = myDataSource.getRepository(User).create({
       email: email,
       password: bcrypt.hashSync(password, salt),
@@ -93,4 +97,76 @@ export const userMakeAva = async function (
     console.error("Ошибка сервера:", error);
     res.status(500).json({ message: "Внутренняя ошибка сервера" });
   }
+};
+
+export const userFormDataAvatar = async function (
+  req: RequestWithUser,
+  res: Response
+) {
+  try {
+    const userFromToken = req.user;
+    const user = await userRepo.findOneBy({ id: userFromToken.id });
+    if (!user) {
+      return;
+    }
+    const oldAvatarPath = user.avatar;
+    user.avatar = req.file.filename;
+    await myDataSource.getRepository(User).save(user);
+
+    if (oldAvatarPath) {
+      const filePath = path.join(__dirname, "../uploads", oldAvatarPath);
+      fs.unlink(filePath, (err) => {
+        if (err) {
+          console.error("Ошибка при удалении файла:", err);
+        } else {
+          console.log("Файл успешно удален");
+        }
+      });
+    }
+    res.status(200).json({ filename: req.file.filename });
+  } catch (error) {
+    console.error("Ошибка сервера:", error);
+    res.status(500).json({ message: "Внутренняя ошибка сервера" });
+  }
+};
+
+export const changeInfoAboutUser = async function (
+  req: RequestWithUser,
+  res: Response
+) {
+  const userId = req.user.id;
+  const { Email, UserName } = req.body;
+  try {
+    const currentUser = await userRepo.findOneBy({ id: userId });
+    if (!currentUser) {
+      return;
+    }
+    currentUser.email = Email;
+    currentUser.userName = UserName;
+    await userRepo.save(currentUser);
+    res
+      .status(200)
+      .json({ email: currentUser.email, userName: currentUser.userName });
+  } catch (error) {
+    console.error("Ошибка сервера:", error);
+    res.status(500).json({ message: "Внутренняя ошибка сервера" });
+  }
+};
+
+export const changePasswordUser = async function (
+  req: RequestWithUser,
+  res: Response
+) {
+  const userId = req.user.id;
+  const { Password } = req.body;
+
+  try {
+    const currentUser = await userRepo.findOneBy({ id: userId });
+    if (!currentUser) {
+      return;
+    }
+    currentUser.password = bcrypt.hashSync(Password, salt);
+    await userRepo.save(currentUser);
+    res.status(200).json({ Password: Password });
+  } catch (error) {}
 };

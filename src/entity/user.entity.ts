@@ -1,4 +1,5 @@
-import { Entity, Column, PrimaryGeneratedColumn } from "typeorm";
+import { Entity, Column, PrimaryGeneratedColumn, OneToMany } from "typeorm";
+import { Rate } from "./book_rating.entity";
 
 @Entity()
 export class User {
@@ -16,4 +17,7 @@ export class User {
 
   @Column({ default: null })
   avatar: string | null;
+
+  @OneToMany(() => Rate, (rate) => rate.user)
+  rate: Rate[];
 }
