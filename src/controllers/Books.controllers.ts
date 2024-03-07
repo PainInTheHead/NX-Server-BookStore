@@ -7,11 +7,15 @@ import { GenreBook } from "../entity/genre-books.entity";
 import { Genre } from "../entity/genre.entity";
 import { Rate } from "../entity/book_rating.entity";
 import { Author } from "../entity/author.entity";
+import { Favorites } from "../entity/favorites.entity";
+import { FavoriteBook } from "../entity/favorite_book.entity";
 const bookRepo = myDataSource.getRepository(Book);
 const bookGenreRepo = myDataSource.getRepository(GenreBook);
 const genreRepo = myDataSource.getRepository(Genre);
 const rateRepo = myDataSource.getRepository(Rate);
 const authRepo = myDataSource.getRepository(Author);
+const favoritesRepo = myDataSource.getRepository(Favorites);
+const favBookRepo = myDataSource.getRepository(FavoriteBook);
 
 export const bookCreate = async function (req: Request, res: Response) {
   const { title, description, price, auth } = req.body;
@@ -173,6 +177,38 @@ export const putGenreBooks = async function (req: Request, res: Response) {
 export const getItemsWithGenre = async function (req: Request, res: Response) {
   const { ids } = req.body;
   try {
+    if (!ids[0]) {
+      const currentBook = await bookRepo.find({
+        relations: ["rates", "genre"],
+      });
+      let allBooks = [];
+      for (let i = 0; i < currentBook.length; i++) {
+        const book = currentBook[i];
+
+        const rate = await rateRepo.findBy({ book: { id: book.id } });
+        const sum = rate.reduce(
+          (accumulator, currentValue) => accumulator + currentValue.value,
+          0
+        );
+        let average = Math.round(sum / rate.length);
+        if (!average) {
+          average = 0;
+        }
+
+        const defaultBook = {
+          bookId: book.id,
+          title: book.title,
+          description: book.description,
+          price: book.price,
+          author: book.auth?.author_name,
+          liked: book.liked,
+          average: average,
+        };
+        allBooks.push(defaultBook);
+      }
+      return res.status(200).json(allBooks);
+    }
+
     const filterPromise = ids.map(async (id) => {
       const filter = await bookGenreRepo.find({
         where: {
@@ -200,6 +236,9 @@ export const getItemsWithGenre = async function (req: Request, res: Response) {
           genre: { id: id },
         },
         relations: { auth: true },
+        select: {
+          auth: { author_name: true },
+        },
       });
       const rate = await rateRepo.findBy({ book: { id: filtered.id } });
       const sum = rate.reduce(
@@ -210,7 +249,189 @@ export const getItemsWithGenre = async function (req: Request, res: Response) {
       if (!average) {
         average = 0;
       }
-      const finallyBook = { filtered, average };
+      const finallyBook = {
+        bookId: filtered.id,
+        title: filtered.title,
+        description: filtered.description,
+        price: filtered.price,
+        author: filtered.auth?.author_name,
+        liked: filtered.liked,
+        average,
+      };
+      return finallyBook;
+    });
+    const filteredAllBooks = await Promise.all(filteredAllBooksPromises);
+
+    res.status(200).json(filteredAllBooks);
+  } catch (error) {
+    res.status(404).json({ message: "Такой пользователь уже существует" });
+  }
+};
+
+export const addBookToFavorites = async function (
+  req: RequestWithUser,
+  res: Response
+) {
+  const { bookId } = req.body;
+  try {
+    const favoritesOfUser = await favoritesRepo.findOne({
+      where: {
+        userId: req.user,
+      },
+    });
+    const book = await bookRepo.findOne({
+      where: {
+        id: bookId,
+      },
+    });
+    const itsFavoritesBook = await favBookRepo.findOne({
+      where: { book: book, favorites: favoritesOfUser },
+    });
+
+    if (!itsFavoritesBook) {
+      const addBookToFavorites = await favBookRepo.create({
+        book: book,
+        favorites: favoritesOfUser,
+      });
+
+      book.liked = true;
+      await bookRepo.save(book);
+
+      await favBookRepo.save(addBookToFavorites);
+
+      return res.status(200).json({
+        book: addBookToFavorites.book.id,
+        favorites: addBookToFavorites.favorites.id,
+        id: addBookToFavorites.id,
+      });
+    } else {
+      const deletedTodo = await favBookRepo.remove(itsFavoritesBook);
+      if (deletedTodo) {
+        book.liked = false;
+        await bookRepo.save(book);
+        return res.status(200).json({ message: "Книга удалена из избранных" });
+      }
+    }
+
+    // return res.status(200).json(itsFavoritesBook);
+  } catch (error) {
+    res.status(404).json({ message: "Произошла ошибка при обработке запроса" });
+  }
+};
+
+// export const changeRatingOfBook = async function (
+//   req: RequestWithUser,
+//   res: Response
+// ) {
+//   try {
+//     const rate = await rateRepo.findOneBy({
+//       user: req.user.id,
+//       book: req.body.bookId,
+//     });
+//     if (rate) {
+//       rateRepo.remove(rate);
+//     }
+//     const rateNew = rateRepo.create({
+//       value: req.body.rate,
+//       user: req.user.id,
+//       book: req.body.bookId,
+//     });
+
+//     await rateRepo.save(rateNew);
+//     res.status(200).json(rateNew);
+//   } catch (error) {
+//     res.status(404).json({ message: "Такой пользователь уже существует" });
+//   }
+// };
+
+export const getItemsForAuthorized = async function (
+  req: RequestWithUser,
+  res: Response
+) {
+  const { ids } = req.body;
+  const user = req.user;
+  try {
+    if (!ids[0]) {
+      const currentBook = await bookRepo.find({
+        relations: ["rates", "genre"],
+      });
+      let allBooks = [];
+      for (let i = 0; i < currentBook.length; i++) {
+        const book = currentBook[i];
+
+        const rate = await rateRepo.findBy({ book: { id: book.id } });
+        const sum = rate.reduce(
+          (accumulator, currentValue) => accumulator + currentValue.value,
+          0
+        );
+        let average = Math.round(sum / rate.length);
+        if (!average) {
+          average = 0;
+        }
+
+        const defaultBook = {
+          bookId: book.id,
+          title: book.title,
+          description: book.description,
+          price: book.price,
+          author: book.auth?.author_name,
+          liked: book.liked,
+          average: average,
+        };
+        allBooks.push(defaultBook);
+      }
+      return res.status(200).json(allBooks);
+    }
+
+    const filterPromise = ids.map(async (id) => {
+      const filter = await bookGenreRepo.find({
+        where: {
+          genres: { id: id },
+        },
+        relations: { booksId: true },
+      });
+      return filter;
+    });
+    const genreFilters = (await Promise.all(filterPromise)).flat();
+
+    const uniqueBooksId = [];
+    const FILTER = genreFilters.filter((filter) => {
+      if (!uniqueBooksId.includes(filter.booksId.id)) {
+        uniqueBooksId.push(filter.booksId.id);
+        return true;
+      }
+      return false;
+    });
+
+    const filteredAllBooksPromises = FILTER.map(async (ids) => {
+      const id = ids.id;
+      const filtered = await bookRepo.findOne({
+        where: {
+          genre: { id: id },
+        },
+        relations: { auth: true },
+        select: {
+          auth: { author_name: true },
+        },
+      });
+      const rate = await rateRepo.findBy({ book: { id: filtered.id } });
+      const sum = rate.reduce(
+        (accumulator, currentValue) => accumulator + currentValue.value,
+        0
+      );
+      let average = Math.round(sum / rate.length);
+      if (!average) {
+        average = 0;
+      }
+      const finallyBook = {
+        bookId: filtered.id,
+        title: filtered.title,
+        description: filtered.description,
+        price: filtered.price,
+        author: filtered.auth?.author_name,
+        liked: filtered.liked,
+        average,
+      };
       return finallyBook;
     });
     const filteredAllBooks = await Promise.all(filteredAllBooksPromises);

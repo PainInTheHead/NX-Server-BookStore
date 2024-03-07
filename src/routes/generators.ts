@@ -7,7 +7,8 @@ import {
   getItems,
   getItemsWithGenre,
   changeRatingOfBook,
-  getRatingOfBook
+  getRatingOfBook,
+  addBookToFavorites
 } from "../controllers/Books.controllers";
 import { verifyToken } from "../midleware/verifytoken";
 
@@ -20,6 +21,7 @@ router.get("/getitems", getItems);
 router.get("/getitemsGenre", getItemsWithGenre);
 router.post("/changeRatingOfBook", verifyToken, changeRatingOfBook);
 router.get("/getRatingOfBook", getRatingOfBook);
+router.post("/addBookToFavorites",verifyToken,  addBookToFavorites);
 
 
 

@@ -5,9 +5,11 @@ import * as bcrypt from "bcryptjs";
 const jwt = require("jsonwebtoken");
 import { RequestWithUser } from "../Types/req.user";
 import * as fs from "fs";
-const userRepo = myDataSource.getRepository(User);
+import { Favorites } from "../entity/favorites.entity";
 const path = require("path");
 
+const userRepo = myDataSource.getRepository(User);
+const favoriteRepo = myDataSource.getRepository(Favorites);
 const salt = bcrypt.genSaltSync(10);
 
 export const userRegister = async function (req: Request, res: Response) {
@@ -19,13 +21,25 @@ export const userRegister = async function (req: Request, res: Response) {
         .status(409)
         .json({ message: "this email in now moment is be registed" });
     }
-    // const salt = bcrypt.genSaltSync(10);
+
     const user = myDataSource.getRepository(User).create({
       email: email,
       password: bcrypt.hashSync(password, salt),
     });
     await userRepo.save(user).then(() => console.log("User created"));
-    res.status(201).json(user);
+
+    const favorites = favoriteRepo.create({
+      userId: user,
+    });
+    await favoriteRepo.save(favorites);
+
+    const userWithFavorites = await userRepo.findOne({
+      where: {
+        id: user.id,
+      },
+      relations: ["favorites"],
+    });
+    res.status(201).json({ user: userWithFavorites, favorites });
   } catch (error) {
     console.error(error);
     res.status(404).json({ message: "Такой пользователь уже существует" });
@@ -39,8 +53,8 @@ export const userLogin = async function (req: Request, res: Response) {
     if (!user) {
       return;
     }
-    const descryptPass = bcrypt.compareSync(password, user.password);
-    if (!descryptPass) {
+    const decryptPass = bcrypt.compareSync(password, user.password);
+    if (!decryptPass) {
       return res.status(401).json({ message: "неверный логин или пароль" });
     }
     const token = jwt.sign(
@@ -51,12 +65,15 @@ export const userLogin = async function (req: Request, res: Response) {
       "dev-jwt",
       { expiresIn: 60 * 60 }
     );
+
+    const favorites = await favoriteRepo.findOne({ where: { userId: user } });
     return res.status(200).json({
       token: `Bearer ${token}`,
       id: user.id,
       avatar: user.avatar,
       userName: user.userName,
       email: user.email,
+      favorites: favorites.id,
     });
   } catch (error) {
     console.error(error);
@@ -168,5 +185,8 @@ export const changePasswordUser = async function (
     currentUser.password = bcrypt.hashSync(Password, salt);
     await userRepo.save(currentUser);
     res.status(200).json({ Password: Password });
-  } catch (error) {}
+  } catch (error) {
+    console.error("Ошибка сервера:", error);
+    res.status(500).json({ message: "Внутренняя ошибка сервера" });
+  }
 };

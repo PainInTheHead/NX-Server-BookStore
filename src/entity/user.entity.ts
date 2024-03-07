@@ -1,6 +1,12 @@
-import { Entity, Column, PrimaryGeneratedColumn, OneToMany } from "typeorm";
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  OneToMany,
+  OneToOne,
+} from "typeorm";
 import { Rate } from "./book_rating.entity";
-
+import { Favorites } from "./favorites.entity";
 @Entity()
 export class User {
   @PrimaryGeneratedColumn()
@@ -20,4 +26,7 @@ export class User {
 
   @OneToMany(() => Rate, (rate) => rate.user)
   rate: Rate[];
+
+  @OneToOne(() => Favorites, (favorites) => favorites.userId)
+  favorites: Favorites;
 }

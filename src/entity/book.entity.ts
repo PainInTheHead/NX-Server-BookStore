@@ -11,7 +11,7 @@ import {
 import { GenreBook } from "./genre-books.entity";
 import { Rate } from "./book_rating.entity";
 import { Author } from "./author.entity";
-
+import { FavoriteBook } from "./favorite_book.entity";
 
 @Entity()
 export class Book {
@@ -27,6 +27,9 @@ export class Book {
   @Column()
   price: number;
 
+  @Column({ default: false })
+  liked: boolean;
+
   @OneToMany(() => GenreBook, (genre) => genre.booksId)
   genre: GenreBook;
 
@@ -35,5 +38,8 @@ export class Book {
 
   @ManyToOne(() => Author, (auth) => auth.book)
   @JoinColumn()
-  auth: Author
+  auth: Author;
+
+  @OneToOne(() => FavoriteBook, (favorite) => favorite.book)
+  favorite: FavoriteBook;
 }
