@@ -9,6 +9,8 @@ import { Rate } from "../entity/book_rating.entity";
 import { Author } from "../entity/author.entity";
 import { Favorites } from "../entity/favorites.entity";
 import { FavoriteBook } from "../entity/favorite_book.entity";
+import { Between, FindOptionsUtils } from "typeorm";
+import { sortByField } from "../utils/books";
 const bookRepo = myDataSource.getRepository(Book);
 const bookGenreRepo = myDataSource.getRepository(GenreBook);
 const genreRepo = myDataSource.getRepository(Genre);
@@ -147,43 +149,27 @@ export const getRatingOfBook = async function (
   }
 };
 
-export const putGenreBooks = async function (req: Request, res: Response) {
-  // const { bookId, genreId } = req.body;
-  // try {
-  //   const curentBook = await bookRepo.findOneBy({ id: bookId });
-  //   const curentGenre = await genryRepo.findOneBy({ id: genreId });
-  //   if (!curentBook || !curentGenre) {
-  //     return res
-  //       .status(400)
-  //       .json({ message: "Такой пользователь уже существует" });
-  //   }
-  //   const inValidBook = await bookGenryRepo.findOneBy({ booksId: curentBook });
-  //   if (inValidBook) {
-  //     return res
-  //       .status(400)
-  //       .json({ message: "Такой пользователь уже существует" });
-  //   }
-  //   const book = bookGenryRepo.create({
-  //     booksId: curentBook,
-  //     genreId: curentGenre,
-  //   });
-  //   await bookGenryRepo.save(book);
-  //   res.status(200).json(book);
-  // } catch (error) {
-  //   res.status(404).json({ message: "Такой пользователь уже существует" });
-  // }
-};
-
 export const getItemsWithGenre = async function (req: Request, res: Response) {
   const { ids } = req.body;
+  const page = req.body.page;
+  const take = 4;
+  const prices = req.body.prices;
+  const startIndex = isNaN(page) ? 0 : (page - 1) * take;
+  const endIndex = startIndex + take;
+  const sortBy: "Price" | "Name" | "Author_name" | "Rating" | "Date_of_issue" =
+    req.body.sortBy;
   try {
     if (!ids[0]) {
-      const currentBook = await bookRepo.find({
-        relations: ["rates", "genre"],
+      const books = await bookRepo.find({
+        where: {
+          price: Between(prices[0], prices[1]),
+        },
+        relations: ["rates", "genre", "auth"],
       });
-      let allBooks = [];
-      for (let i = 0; i < currentBook.length; i++) {
-        const book = currentBook[i];
+
+      let booksWithRateAndHolders = [];
+      for (let i = 0; i < books.length; i++) {
+        const book = books[i];
 
         const rate = await rateRepo.findBy({ book: { id: book.id } });
         const sum = rate.reduce(
@@ -204,9 +190,47 @@ export const getItemsWithGenre = async function (req: Request, res: Response) {
           liked: book.liked,
           average: average,
         };
-        allBooks.push(defaultBook);
+        booksWithRateAndHolders.push(defaultBook);
       }
-      return res.status(200).json(allBooks);
+
+      let sortedData = [];
+      switch (sortBy) {
+        case "Price":
+          sortedData = booksWithRateAndHolders
+            .slice()
+            .sort(sortByField("price"));
+          break;
+        case "Name":
+          sortedData = booksWithRateAndHolders
+            .slice()
+            .sort(sortByField("title"));
+          break;
+        case "Author_name":
+          sortedData = booksWithRateAndHolders
+            .slice()
+            .sort(sortByField("author"));
+          break;
+        case "Rating":
+          sortedData = booksWithRateAndHolders
+            .slice()
+            .sort(sortByField("average"));
+          break;
+        case "Date_of_issue":
+          console.log(
+            "Данные не могут быть отсортированы по дате выпуска, так как соответствующее поле отсутствует."
+          );
+        default:
+          sortedData = booksWithRateAndHolders
+            .slice()
+            .sort(sortByField("price"));
+          break;
+      }
+
+      const allBooks = sortedData.slice(startIndex, endIndex);
+      const totalCount = sortedData.length;
+      const totalPages = Math.ceil(sortedData.length / take);
+
+      return res.status(200).json({ allBooks, totalCount, totalPages });
     }
 
     const filterPromise = ids.map(async (id) => {
@@ -262,7 +286,254 @@ export const getItemsWithGenre = async function (req: Request, res: Response) {
     });
     const filteredAllBooks = await Promise.all(filteredAllBooksPromises);
 
-    res.status(200).json(filteredAllBooks);
+    let sortedData = [];
+    switch (sortBy) {
+      case "Price":
+        sortedData = filteredAllBooks.slice().sort(sortByField("price"));
+        break;
+      case "Name":
+        sortedData = filteredAllBooks.slice().sort(sortByField("title"));
+        break;
+      case "Author_name":
+        sortedData = filteredAllBooks.slice().sort(sortByField("author"));
+        break;
+      case "Rating":
+        sortedData = filteredAllBooks.slice().sort(sortByField("average"));
+        break;
+      case "Date_of_issue":
+        console.log(
+          "Данные не могут быть отсортированы по дате выпуска, так как соответствующее поле отсутствует."
+        );
+      default:
+        sortedData = filteredAllBooks.slice().sort(sortByField("price"));
+        break;
+    }
+
+    const filterByPrice = sortedData.filter(
+      (book) => book.price >= prices[0] && book.price <= prices[1]
+    );
+
+    const allBooks = filterByPrice.slice(startIndex, endIndex);
+    const totalCount = filterByPrice.length;
+    const totalPages = Math.ceil(filterByPrice.length / take);
+
+    res.status(200).json({ allBooks, totalCount, totalPages });
+  } catch (error) {
+    res.status(404).json({ message: "Такой пользователь уже существует" });
+  }
+};
+
+export const getItemsForAuthorized = async function (
+  req: RequestWithUser,
+  res: Response
+) {
+  const { ids } = req.body;
+  const user = req.user;
+  const page = req.body.page;
+  const take = 4;
+  const prices = req.body.prices;
+  const startIndex = isNaN(page) ? 0 : (page - 1) * take;
+  const endIndex = startIndex + take;
+  const sortBy: "Price" | "Name" | "Author_name" | "Rating" | "Date_of_issue" =
+    req.body.sortBy;
+
+  try {
+    if (!ids[0]) {
+      const books = await bookRepo.find({
+        where: {
+          price: Between(prices[0], prices[1]),
+        },
+        relations: ["rates", "genre", "auth"],
+      });
+
+      let booksWithRateAndHolders = [];
+      for (let i = 0; i < books.length; i++) {
+        const book = books[i];
+
+        const rate = await rateRepo.findBy({ book: { id: book.id } });
+        const sum = rate.reduce(
+          (accumulator, currentValue) => accumulator + currentValue.value,
+          0
+        );
+
+        let average = Math.round(sum / rate.length);
+        if (!average) {
+          average = 0;
+        }
+
+        const Favorites = await favoritesRepo.findOne({
+          where: {
+            userId: user,
+          },
+        });
+
+        const FavoritesBook = await favBookRepo.findOne({
+          where: {
+            book: book,
+            favorites: Favorites,
+          },
+        });
+
+        let lukas = false;
+        if (FavoritesBook) {
+          lukas = true;
+        }
+
+        const defaultBook = {
+          bookId: book.id,
+          title: book.title,
+          description: book.description,
+          price: book.price,
+          author: book.auth?.author_name,
+          liked: lukas,
+          average: average,
+        };
+        booksWithRateAndHolders.push(defaultBook);
+      }
+      
+      let sortedData = [];
+      switch (sortBy) {
+        case "Price":
+          sortedData = booksWithRateAndHolders
+            .slice()
+            .sort(sortByField("price"));
+          break;
+        case "Name":
+          sortedData = booksWithRateAndHolders
+            .slice()
+            .sort(sortByField("title"));
+          break;
+        case "Author_name":
+          sortedData = booksWithRateAndHolders
+            .slice()
+            .sort(sortByField("author"));
+          break;
+        case "Rating":
+          sortedData = booksWithRateAndHolders
+            .slice()
+            .sort(sortByField("average"));
+          break;
+        case "Date_of_issue":
+          console.log(
+            "Данные не могут быть отсортированы по дате выпуска, так как соответствующее поле отсутствует."
+          );
+        default:
+          sortedData = booksWithRateAndHolders
+            .slice()
+            .sort(sortByField("price"));
+          break;
+      }
+
+      const allBooks = sortedData.slice(startIndex, endIndex);
+      const totalCount = sortedData.length;
+      const totalPages = Math.ceil(sortedData.length / take);
+
+      return res.status(200).json({ allBooks, totalCount, totalPages });
+    }
+
+    const filterPromise = ids.map(async (id) => {
+      const filter = await bookGenreRepo.find({
+        where: {
+          genres: { id: id },
+        },
+        relations: { booksId: true },
+      });
+      return filter;
+    });
+    const genreFilters = (await Promise.all(filterPromise)).flat();
+
+    const uniqueBooksId = [];
+    const FILTER = genreFilters.filter((filter) => {
+      if (!uniqueBooksId.includes(filter.booksId.id)) {
+        uniqueBooksId.push(filter.booksId.id);
+        return true;
+      }
+      return false;
+    });
+
+    const filteredAllBooksPromises = FILTER.map(async (ids) => {
+      const id = ids.id;
+      const book = await bookRepo.findOne({
+        where: {
+          genre: { id: id },
+        },
+        relations: { auth: true },
+        select: {
+          auth: { author_name: true },
+        },
+      });
+      const rate = await rateRepo.findBy({ book: { id: book.id } });
+      const sum = rate.reduce(
+        (accumulator, currentValue) => accumulator + currentValue.value,
+        0
+      );
+      let average = Math.round(sum / rate.length);
+      if (!average) {
+        average = 0;
+      }
+
+      const Favorites = await favoritesRepo.findOne({
+        where: {
+          userId: user,
+        },
+      });
+
+      const FavoritesBook = await favBookRepo.findOne({
+        where: {
+          book: book,
+          favorites: Favorites,
+        },
+      });
+
+      let lukas = false;
+      if (FavoritesBook) {
+        lukas = true;
+      }
+
+      const finallyBook = {
+        bookId: book.id,
+        title: book.title,
+        description: book.description,
+        price: book.price,
+        author: book.auth?.author_name,
+        liked: lukas,
+        average,
+      };
+      return finallyBook;
+    });
+    const filteredAllBooks = await Promise.all(filteredAllBooksPromises);
+   let sortedData = [];
+   switch (sortBy) {
+     case "Price":
+       sortedData = filteredAllBooks.slice().sort(sortByField("price"));
+       break;
+     case "Name":
+       sortedData = filteredAllBooks.slice().sort(sortByField("title"));
+       break;
+     case "Author_name":
+       sortedData = filteredAllBooks.slice().sort(sortByField("author"));
+       break;
+     case "Rating":
+       sortedData = filteredAllBooks.slice().sort(sortByField("average"));
+       break;
+     case "Date_of_issue":
+       console.log(
+         "Данные не могут быть отсортированы по дате выпуска, так как соответствующее поле отсутствует."
+       );
+      default :
+      sortedData = filteredAllBooks.slice().sort(sortByField("price"));
+       break;
+   }
+
+   const filterByPrice = sortedData.filter(
+     (book) => book.price >= prices[0] && book.price <= prices[1]
+   );
+
+   const allBooks = filterByPrice.slice(startIndex, endIndex);
+   const totalCount = filterByPrice.length;
+   const totalPages = Math.ceil(filterByPrice.length / take);
+
+   res.status(200).json({ allBooks, totalCount, totalPages });
   } catch (error) {
     res.status(404).json({ message: "Такой пользователь уже существует" });
   }
@@ -279,165 +550,45 @@ export const addBookToFavorites = async function (
         userId: req.user,
       },
     });
+
     const book = await bookRepo.findOne({
       where: {
         id: bookId,
       },
     });
+
     const itsFavoritesBook = await favBookRepo.findOne({
       where: { book: book, favorites: favoritesOfUser },
     });
 
     if (!itsFavoritesBook) {
-      const addBookToFavorites = await favBookRepo.create({
+      const addBookToFavorites = favBookRepo.create({
         book: book,
         favorites: favoritesOfUser,
       });
 
-      book.liked = true;
-      await bookRepo.save(book);
-
-      await favBookRepo.save(addBookToFavorites);
+      const newFavoriteBook = await favBookRepo.save(addBookToFavorites);
+      // const newAdded = await favBookRepo.findOne({
+      //   where: { id: newFavoriteBook.id },
+      //   relations: { book: true },
+      // });
 
       return res.status(200).json({
-        book: addBookToFavorites.book.id,
-        favorites: addBookToFavorites.favorites.id,
-        id: addBookToFavorites.id,
+        book: newFavoriteBook.book.id,
+        favorites: newFavoriteBook.favorites.id,
+        id: newFavoriteBook.id,
+        // itsFavoritesBook,
       });
     } else {
-      const deletedTodo = await favBookRepo.remove(itsFavoritesBook);
-      if (deletedTodo) {
-        book.liked = false;
-        await bookRepo.save(book);
-        return res.status(200).json({ message: "Книга удалена из избранных" });
-      }
+      const deletedBook = await favBookRepo.remove(itsFavoritesBook);
+
+      return res.status(200).json({
+        book: book.id,
+      });
     }
-
-    // return res.status(200).json(itsFavoritesBook);
+    // res.status(200).json({ itsFavoritesBook, book });
   } catch (error) {
-    res.status(404).json({ message: "Произошла ошибка при обработке запроса" });
-  }
-};
-
-// export const changeRatingOfBook = async function (
-//   req: RequestWithUser,
-//   res: Response
-// ) {
-//   try {
-//     const rate = await rateRepo.findOneBy({
-//       user: req.user.id,
-//       book: req.body.bookId,
-//     });
-//     if (rate) {
-//       rateRepo.remove(rate);
-//     }
-//     const rateNew = rateRepo.create({
-//       value: req.body.rate,
-//       user: req.user.id,
-//       book: req.body.bookId,
-//     });
-
-//     await rateRepo.save(rateNew);
-//     res.status(200).json(rateNew);
-//   } catch (error) {
-//     res.status(404).json({ message: "Такой пользователь уже существует" });
-//   }
-// };
-
-export const getItemsForAuthorized = async function (
-  req: RequestWithUser,
-  res: Response
-) {
-  const { ids } = req.body;
-  const user = req.user;
-  try {
-    if (!ids[0]) {
-      const currentBook = await bookRepo.find({
-        relations: ["rates", "genre"],
-      });
-      let allBooks = [];
-      for (let i = 0; i < currentBook.length; i++) {
-        const book = currentBook[i];
-
-        const rate = await rateRepo.findBy({ book: { id: book.id } });
-        const sum = rate.reduce(
-          (accumulator, currentValue) => accumulator + currentValue.value,
-          0
-        );
-        let average = Math.round(sum / rate.length);
-        if (!average) {
-          average = 0;
-        }
-
-        const defaultBook = {
-          bookId: book.id,
-          title: book.title,
-          description: book.description,
-          price: book.price,
-          author: book.auth?.author_name,
-          liked: book.liked,
-          average: average,
-        };
-        allBooks.push(defaultBook);
-      }
-      return res.status(200).json(allBooks);
-    }
-
-    const filterPromise = ids.map(async (id) => {
-      const filter = await bookGenreRepo.find({
-        where: {
-          genres: { id: id },
-        },
-        relations: { booksId: true },
-      });
-      return filter;
-    });
-    const genreFilters = (await Promise.all(filterPromise)).flat();
-
-    const uniqueBooksId = [];
-    const FILTER = genreFilters.filter((filter) => {
-      if (!uniqueBooksId.includes(filter.booksId.id)) {
-        uniqueBooksId.push(filter.booksId.id);
-        return true;
-      }
-      return false;
-    });
-
-    const filteredAllBooksPromises = FILTER.map(async (ids) => {
-      const id = ids.id;
-      const filtered = await bookRepo.findOne({
-        where: {
-          genre: { id: id },
-        },
-        relations: { auth: true },
-        select: {
-          auth: { author_name: true },
-        },
-      });
-      const rate = await rateRepo.findBy({ book: { id: filtered.id } });
-      const sum = rate.reduce(
-        (accumulator, currentValue) => accumulator + currentValue.value,
-        0
-      );
-      let average = Math.round(sum / rate.length);
-      if (!average) {
-        average = 0;
-      }
-      const finallyBook = {
-        bookId: filtered.id,
-        title: filtered.title,
-        description: filtered.description,
-        price: filtered.price,
-        author: filtered.auth?.author_name,
-        liked: filtered.liked,
-        average,
-      };
-      return finallyBook;
-    });
-    const filteredAllBooks = await Promise.all(filteredAllBooksPromises);
-
-    res.status(200).json(filteredAllBooks);
-  } catch (error) {
-    res.status(404).json({ message: "Такой пользователь уже существует" });
+    console.error(error);
+    res.status(500).json({ message: "Произошла ошибка при обработке запроса" });
   }
 };

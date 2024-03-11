@@ -5,7 +5,7 @@ export const myDataSource = new DataSource({
   host: "localhost",
   port: 5432,
   username: "postgres",
-  password: "123456",
+  password: "12345678",
   database: "NX-BOOK-DB",
   entities: [__dirname + "/**/*.entity{.ts, .js}"],
   logging: true,

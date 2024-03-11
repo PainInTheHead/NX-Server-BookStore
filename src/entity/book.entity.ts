@@ -40,6 +40,7 @@ export class Book {
   @JoinColumn()
   auth: Author;
 
-  @OneToOne(() => FavoriteBook, (favorite) => favorite.book)
-  favorite: FavoriteBook;
+  @OneToMany(() => FavoriteBook, (favorite) => favorite.book)
+  @JoinColumn()
+  favorite: FavoriteBook[];
 }
