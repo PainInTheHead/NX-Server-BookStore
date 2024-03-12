@@ -6,10 +6,12 @@ const jwt = require("jsonwebtoken");
 import { RequestWithUser } from "../Types/req.user";
 import * as fs from "fs";
 import { Favorites } from "../entity/favorites.entity";
+import { Cart } from "../entity/cart.entity";
 const path = require("path");
 
 const userRepo = myDataSource.getRepository(User);
 const favoriteRepo = myDataSource.getRepository(Favorites);
+const cartRepo = myDataSource.getRepository(Cart);
 const salt = bcrypt.genSaltSync(10);
 
 export const userRegister = async function (req: Request, res: Response) {
@@ -33,11 +35,16 @@ export const userRegister = async function (req: Request, res: Response) {
     });
     await favoriteRepo.save(favorites);
 
+    const cart = cartRepo.create({
+      userId: user,
+    });
+    await cartRepo.save(cart);
+
     const userWithFavorites = await userRepo.findOne({
       where: {
         id: user.id,
       },
-      relations: ["favorites"],
+      relations: ["favorites", "cart"],
     });
     res.status(201).json({ user: userWithFavorites, favorites });
   } catch (error) {

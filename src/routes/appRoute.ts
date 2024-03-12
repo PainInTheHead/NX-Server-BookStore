@@ -7,6 +7,6 @@ import generators from './generators'
 const router = Router()
 
 router.use('/user', userRoute)
-router.use('/generators', generators)
+router.use('/books', generators)
 
 export default router

@@ -9,21 +9,22 @@ import {
 } from "typeorm";
 import { Book } from "./book.entity";
 import { User } from "./user.entity";
+import { Favorites } from "./favorites.entity";
+import { Cart } from "./cart.entity";
 
 @Entity()
-export class Rate {
+export class CartBook {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ default: 0 })
-  value: number;
+  @Column()
+  count: number;
 
-  @ManyToOne(() => Book, (book) => book.rates)
+  @ManyToOne(() => Book, (book) => book.cart)
   @JoinColumn()
   book: Book;
 
-  @ManyToOne(() => User, (user) => user.rate)
+  @ManyToOne(() => Cart, (cartbook) => cartbook.cartbook)
   @JoinColumn()
-  user: User;
-
+  cart: Cart;
 }

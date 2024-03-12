@@ -7,6 +7,8 @@ import {
 } from "typeorm";
 import { Rate } from "./book_rating.entity";
 import { Favorites } from "./favorites.entity";
+import { Cart } from "./cart.entity";
+import { Comments } from "./comments.entity";
 @Entity()
 export class User {
   @PrimaryGeneratedColumn()
@@ -29,4 +31,10 @@ export class User {
 
   @OneToOne(() => Favorites, (favorites) => favorites.userId)
   favorites: Favorites;
+
+  @OneToOne(() => Cart, (cart) => cart.userId)
+  cart: Cart;
+
+  @OneToMany(() => Comments, (comments) => comments.user)
+  comments: Comments[];
 }
