@@ -293,9 +293,7 @@ export const addBookToFavorites = async function (
         book: book,
         favorites: favoritesOfUser,
       });
-
-      book.liked = true;
-      await bookRepo.save(book);
+      
 
       await favBookRepo.save(addBookToFavorites);
 
@@ -307,8 +305,6 @@ export const addBookToFavorites = async function (
     } else {
       const deletedTodo = await favBookRepo.remove(itsFavoritesBook);
       if (deletedTodo) {
-        book.liked = false;
-        await bookRepo.save(book);
         return res.status(200).json({ message: "Книга удалена из избранных" });
       }
     }
@@ -344,13 +340,22 @@ export const addBookToFavorites = async function (
 //   }
 // };
 
-export const getItemsForAuthorized = async function (
-  req: RequestWithUser,
-  res: Response
-) {
+
+
+
+
+
+
+export const getItemsForAuthorized = async function (req: RequestWithUser, res: Response) {
   const { ids } = req.body;
-  const user = req.user;
+  const user = req.user
   try {
+    const favoritesOfUser = await favoritesRepo.findOne({
+      where: {
+        userId: req.user,
+      },
+    });
+    
     if (!ids[0]) {
       const currentBook = await bookRepo.find({
         relations: ["rates", "genre"],
@@ -368,6 +373,11 @@ export const getItemsForAuthorized = async function (
         if (!average) {
           average = 0;
         }
+
+        const itsFavoritesBook = await favBookRepo.findOne({
+             where: { book: book[i], favorites: favoritesOfUser },
+           });
+
 
         const defaultBook = {
           bookId: book.id,
