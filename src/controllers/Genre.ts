@@ -7,18 +7,16 @@ import { Book } from "../entity/book.entity";
 const bookRepo = myDataSource.getRepository(Book);
 const genreRepo = myDataSource.getRepository(Genre);
 
-
-
 export const createGenre = async function (req: Request, res: Response) {
-    const {name} = req.body
-    try {
-     const genre = genreRepo.create({
-        name: name,
-     })
-     await genreRepo.save(genre)
-     res.status(200).json(genre);
-    } catch (error) {
-      console.error(error);
-      res.status(404).json({ message: "Такой пользователь уже существует" });
-    }
-  };
+  const { name } = req.body;
+  try {
+    const genre = await genreRepo.create({
+      name: name,
+    });
+    await genreRepo.save(genre);
+    res.status(200).json(genre);
+  } catch (error) {
+    console.error(error);
+    res.status(404).json({ message: "Такой пользователь уже существует" });
+  }
+};
