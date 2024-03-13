@@ -23,7 +23,7 @@ const favoritesRepo = myDataSource.getRepository(Favorites);
 const favBookRepo = myDataSource.getRepository(FavoriteBook);
 const cartRepo = myDataSource.getRepository(Cart);
 const cartBookRepo = myDataSource.getRepository(CartBook);
-const commentRepo = myDataSource.getRepository(Comments)
+const commentRepo = myDataSource.getRepository(Comments);
 
 export const bookCreate = async function (req: Request, res: Response) {
   const { title, description, price, auth } = req.body;
@@ -106,7 +106,6 @@ export const changeRatingOfBook = async function (
   res: Response
 ) {
   try {
-
     const rate = await rateRepo.findOne({
       where: {
         user: req.user,
@@ -636,9 +635,7 @@ export const addBookToCart = async function (
 
       await cartBookRepo.save(addBookToCart);
 
-      return res.status(200).json({
-        addBookToCart,
-      });
+      return res.status(200).json(addBookToCart);
     }
     // return res.status(200).json(itsCartBook);
 
@@ -647,13 +644,54 @@ export const addBookToCart = async function (
 
       return res.status(200).json({
         book: book.id,
-        message: "Удалили"
+        message: "Удалили",
       });
     }
 
     itsCartBook.count = count;
     await cartBookRepo.save(itsCartBook);
     return res.status(200).json(itsCartBook);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Произошла ошибка при обработке запроса" });
+  }
+};
+
+export const getBooksOfCarts = async function (
+  req: RequestWithUser,
+  res: Response
+) {
+  try {
+    const cartOfUser = await cartRepo.findOne({
+      where: {
+        userId: req.user,
+      },
+    });
+    const booksIdandCountInCart = await cartBookRepo.find({
+      where: { cart: cartOfUser },
+      relations: ["book"],
+    });
+
+    const finallyBooks = [];
+
+    const booksCart = await Promise.all(
+      booksIdandCountInCart.map(async (bookcart) => {
+        const book = await bookRepo.findOne({
+          where: {
+            id: bookcart.book.id,
+          },
+          relations: ["auth"],
+        });
+        finallyBooks.push({
+          bookId: book.id,
+          title: book.title,
+          price: book.price,
+          author: book.auth.author_name,
+          count: bookcart.count,
+        });
+      })
+    );
+    res.status(200).json(finallyBooks);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Произошла ошибка при обработке запроса" });
@@ -690,13 +728,7 @@ export const getUserRatingCurrentBook = async function (
   }
 };
 
-
-
-
-export const newComment = async function (
-  req: RequestWithUser,
-  res: Response
-) {
+export const newComment = async function (req: RequestWithUser, res: Response) {
   try {
     const newCom = commentRepo.create({
       value: req.body.text,
@@ -711,8 +743,6 @@ export const newComment = async function (
   }
 };
 
-
-
 export const getCommentForCurrentBook = async function (
   req: RequestWithUser,
   res: Response
@@ -720,20 +750,21 @@ export const getCommentForCurrentBook = async function (
   try {
     const comments = await commentRepo.find({
       where: {
-        book: { id: req.body.bookId },
+        book: { id: Number(req.query.bookId) },
       },
-      relations: ["book"],
+      relations: ["book", "user"],
     });
-    // const book = await bookRepo.findOne({
-    //   where: {
-    //     id: req.body.bookId,
-    //   },
-    //   relations: ["rates"],
-    // });
     if (comments.length === 0) {
-      res.status(200).json({ message: 'Оставте первым комментарий!'});
+      res.status(200).json({ message: "Оставте первым комментарий!" });
     } else {
-      res.status(200).json(comments );
+      const allComments = comments.map((comment) => {
+        return {
+          value: comment.value,
+          avatar: comment.user.avatar,
+          username: comment.user.userName,
+        };
+      });
+      res.status(200).json(allComments);
     }
   } catch (error) {
     res.status(404).json({ message: "Такой пользователь уже существует" });

@@ -12,7 +12,8 @@ import {
   getUserRatingCurrentBook,
   addBookToCart,
   newComment,
-  getCommentForCurrentBook
+  getCommentForCurrentBook,
+  getBooksOfCarts
 } from "../controllers/Books.controllers";
 import { verifyToken } from "../midleware/verifytoken";
 
@@ -31,5 +32,6 @@ router.post("/addBookToFavorites", verifyToken, addBookToFavorites);
 router.post("/addBookToCart", verifyToken, addBookToCart);
 router.post("/getItemsForAuthorized", verifyToken, getItemsForAuthorized);
 router.get("/getUserRatingCurrentBook", verifyToken, getUserRatingCurrentBook);
+router.get("/getBooksOfCarts", verifyToken, getBooksOfCarts);
 
 export default router;
