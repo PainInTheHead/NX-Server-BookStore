@@ -106,12 +106,17 @@ export const changeRatingOfBook = async function (
   res: Response
 ) {
   try {
+    const book = await bookRepo.findOne({
+      where: {
+        id: req.body.bookId,
+      },
+    });
     const rate = await rateRepo.findOne({
       where: {
         user: req.user,
-        book: req.body.bookId,
+        book: book,
       },
-      relations: ["user"],
+      relations: ["user", "book"],
     });
     if (rate) {
       await rateRepo.remove(rate);
@@ -119,7 +124,7 @@ export const changeRatingOfBook = async function (
     const rateNew = rateRepo.create({
       value: req.body.rate,
       user: req.user,
-      book: req.body.bookId,
+      book: book,
     });
 
     await rateRepo.save(rateNew);
@@ -730,14 +735,25 @@ export const getUserRatingCurrentBook = async function (
 
 export const newComment = async function (req: RequestWithUser, res: Response) {
   try {
+    const book = await bookRepo.findOne({
+      where: {
+        id: req.body.bookId,
+      },
+    });
+
     const newCom = commentRepo.create({
       value: req.body.text,
       user: req.user,
-      book: req.body.bookId,
+      book: book,
     });
 
     await commentRepo.save(newCom);
-    res.status(200).json(newCom);
+    res.status(200).json({
+      id: newCom.id,
+      value: newCom.value,
+      avatar: newCom.user.avatar,
+      username: newCom.user.userName,
+    });
   } catch (error) {
     res.status(404).json({ message: "Такой пользователь уже существует" });
   }
@@ -755,10 +771,11 @@ export const getCommentForCurrentBook = async function (
       relations: ["book", "user"],
     });
     if (comments.length === 0) {
-      res.status(200).json({ message: "Оставте первым комментарий!" });
+      res.status(200).json([]);
     } else {
       const allComments = comments.map((comment) => {
         return {
+          id: comment.id,
           value: comment.value,
           avatar: comment.user.avatar,
           username: comment.user.userName,
@@ -766,6 +783,176 @@ export const getCommentForCurrentBook = async function (
       });
       res.status(200).json(allComments);
     }
+  } catch (error) {
+    res.status(404).json({ message: "Такой пользователь уже существует" });
+  }
+};
+
+export const getRecommendations = async function (
+  req: RequestWithUser,
+  res: Response
+) {
+  try {
+    const book = await bookRepo.findOne({
+      where: {
+        id: req.body.bookId,
+      },
+      relations: ["genre"],
+    });
+    const genres = await genreRepo.find({
+      where: { genre: book.genre },
+    });
+
+    const genreBook = await bookGenreRepo.find({
+      where: { genres: genres },
+      relations: ["booksId"],
+    });
+    const filteredBooks = genreBook.filter(
+      (book) => book.booksId.id !== req.body.bookId
+    );
+
+    const uniqueBooksId = [];
+    const FILTER = filteredBooks.filter((filter) => {
+      if (!uniqueBooksId.includes(filter.booksId.id)) {
+        uniqueBooksId.push(filter.booksId.id);
+        return true;
+      }
+      return false;
+    });
+
+    const result = await Promise.all(
+      FILTER.map(async (book) => {
+        const rates = await rateRepo.find({
+          where: {
+            book: { id: book.booksId.id },
+          },
+          relations: ["book"],
+        });
+
+        const sum = rates.reduce(
+          (total, current) => ({
+            sum: total.sum + current.value,
+            count: total.count + 1,
+          }),
+          { sum: 0, count: 0 }
+        );
+
+        const average = sum.count > 0 ? Math.round(sum.sum / sum.count) : 0;
+        const authName = await authRepo.findOne({
+          where: {
+            book: book.booksId,
+          },
+        });
+        return {
+          bookId: book.booksId.id,
+          title: book.booksId.title,
+          description: book.booksId.description,
+          price: book.booksId.price,
+          author: authName.author_name,
+          liked: false,
+          date: book.booksId.date,
+          average,
+        };
+      })
+    );
+
+    const sortedData = result.sort((a, b) => b.average - a.average).slice(0, 4);
+    res.status(200).json(sortedData);
+  } catch (error) {
+    res.status(404).json({ message: "Такой пользователь уже существует" });
+  }
+};
+
+export const getRecommendationsForAuth = async function (
+  req: RequestWithUser,
+  res: Response
+) {
+  const user = req.user;
+  try {
+    const book = await bookRepo.findOne({
+      where: {
+        id: req.body.bookId,
+      },
+      relations: ["genre"],
+    });
+    const genres = await genreRepo.find({
+      where: { genre: book.genre },
+    });
+
+    const genreBook = await bookGenreRepo.find({
+      where: { genres: genres },
+      relations: ["booksId"],
+    });
+    const filteredBooks = genreBook.filter(
+      (book) => book.booksId.id !== req.body.bookId
+    );
+
+    const uniqueBooksId = [];
+    const FILTER = filteredBooks.filter((filter) => {
+      if (!uniqueBooksId.includes(filter.booksId.id)) {
+        uniqueBooksId.push(filter.booksId.id);
+        return true;
+      }
+      return false;
+    });
+
+    const result = await Promise.all(
+      FILTER.map(async (book) => {
+        const rates = await rateRepo.find({
+          where: {
+            book: { id: book.booksId.id },
+          },
+          relations: ["book"],
+        });
+
+        const sum = rates.reduce(
+          (total, current) => ({
+            sum: total.sum + current.value,
+            count: total.count + 1,
+          }),
+          { sum: 0, count: 0 }
+        );
+
+        const average = sum.count > 0 ? Math.round(sum.sum / sum.count) : 0;
+
+        const Favorites = await favoritesRepo.findOne({
+          where: {
+            userId: user,
+          },
+        });
+
+        const FavoritesBook = await favBookRepo.findOne({
+          where: {
+            book: book.booksId,
+            favorites: Favorites,
+          },
+        });
+
+        let lukas = false;
+        if (FavoritesBook) {
+          lukas = true;
+        }
+        const authName = await authRepo.findOne({
+          where: {
+            book: book.booksId,
+          },
+        });
+
+        return {
+          bookId: book.booksId.id,
+          title: book.booksId.title,
+          description: book.booksId.description,
+          price: book.booksId.price,
+          author: authName.author_name,
+          liked: lukas,
+          date: book.booksId.date,
+          average,
+        };
+      })
+    );
+
+    const sortedData = result.sort((a, b) => b.average - a.average).slice(0, 4);
+    res.status(200).json(sortedData);
   } catch (error) {
     res.status(404).json({ message: "Такой пользователь уже существует" });
   }
