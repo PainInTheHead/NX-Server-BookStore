@@ -35,6 +35,9 @@ export class Book {
   @Column()
   date: Date;
 
+  @Column()
+  cover: string;
+
   @OneToMany(() => GenreBook, (genre) => genre.booksId)
   genre: GenreBook;
 
@@ -48,7 +51,6 @@ export class Book {
   @OneToMany(() => FavoriteBook, (favorite) => favorite.book)
   @JoinColumn()
   favorite: FavoriteBook[];
-
 
   @OneToMany(() => CartBook, (cart) => cart.book)
   @JoinColumn()

@@ -20,3 +20,14 @@ export const createGenre = async function (req: Request, res: Response) {
     res.status(404).json({ message: "Такой пользователь уже существует" });
   }
 };
+
+
+export const getGenres = async function(req: Request, res: Response) {
+  try {
+    const genres = await genreRepo.find()
+    res.status(200).json(genres)
+  } catch (error) {
+    console.error(error);
+    res.status(404).json({ message: "Такой пользователь уже существует" });
+  }
+};

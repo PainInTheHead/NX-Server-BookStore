@@ -21,6 +21,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static("public"));
 app.use("/uploads", express.static(path.join(__dirname, "src", "uploads")));
+app.use("/covers", express.static(path.join(__dirname, "src", "covers")));
 app.use("/", mainRoute);
 
 // app.post(

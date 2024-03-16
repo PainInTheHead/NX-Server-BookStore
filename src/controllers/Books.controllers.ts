@@ -29,6 +29,7 @@ export const bookCreate = async function (req: Request, res: Response) {
   const { title, description, price, auth } = req.body;
   try {
     const genreIds = req.body.genre;
+    const coverNumber = req.body.cover;
 
     let author = await authRepo.findOne({ where: { author_name: auth } });
 
@@ -49,12 +50,15 @@ export const bookCreate = async function (req: Request, res: Response) {
         return genre;
       })
     );
+
+    const finallyCoverPath = `http://localhost:3005/covers/${coverNumber}.png`;
     const book = bookRepo.create({
       title: title,
       description: description,
       price: price,
       auth: author,
       date: new Date(),
+      cover: finallyCoverPath,
     });
     await bookRepo.save(book);
     const currentBook = await bookRepo.findOne({
@@ -78,6 +82,40 @@ export const bookCreate = async function (req: Request, res: Response) {
   } catch (error) {
     console.error(error);
     res.status(404).json({ message: "Такой пользователь уже существует" });
+  }
+};
+
+export const getCurrentBook = async function (req: Request, res: Response) {
+  const id = req.params.id;
+  try {
+    const currentBook = await bookRepo.findOne({
+      where: {
+        id: Number(id),
+      },
+    });
+    const rate = await rateRepo.findBy({ book: { id: currentBook.id } });
+    const sum = rate.reduce(
+      (accumulator, currentValue) => accumulator + currentValue.value,
+      0
+    );
+    let average = Math.round(sum / rate.length);
+    if (!average) {
+      average = 0;
+    }
+
+    res.status(200).json({
+      bookId: currentBook.id,
+      title: currentBook.title,
+      description: currentBook.description,
+      price: currentBook.price,
+      author: currentBook.auth?.author_name,
+      liked: currentBook.liked,
+      average: average,
+      date: currentBook.date,
+      cover: currentBook.cover,
+    });
+  } catch (error) {
+     res.status(404).json({ message: "Такой пользователь уже существует" });
   }
 };
 
@@ -167,7 +205,7 @@ export const getRatingOfBook = async function (
 };
 
 export const getItemsWithGenre = async function (req: Request, res: Response) {
-  const { ids } = req.body;
+  const { ids, searchQuery } = req.body;
   const page = req.body.page;
   const take = 4;
   const prices = req.body.prices;
@@ -207,6 +245,7 @@ export const getItemsWithGenre = async function (req: Request, res: Response) {
           liked: book.liked,
           average: average,
           date: book.date,
+          cover: book.cover,
         };
         booksWithRateAndHolders.push(defaultBook);
       }
@@ -245,9 +284,15 @@ export const getItemsWithGenre = async function (req: Request, res: Response) {
           break;
       }
 
-      const allBooks = sortedData.slice(startIndex, endIndex);
-      const totalCount = sortedData.length;
-      const totalPages = Math.ceil(sortedData.length / take);
+      const filteredResults = sortedData.filter(
+        (book) =>
+          book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          book.author?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+
+      const allBooks = filteredResults.slice(startIndex, endIndex);
+      const totalCount = filteredResults.length;
+      const totalPages = Math.ceil(filteredResults.length / take);
 
       return res.status(200).json({ allBooks, totalCount, totalPages });
     }
@@ -301,6 +346,7 @@ export const getItemsWithGenre = async function (req: Request, res: Response) {
         liked: filtered.liked,
         average,
         date: filtered.date,
+        cover: filtered.cover,
       };
       return finallyBook;
     });
@@ -332,9 +378,15 @@ export const getItemsWithGenre = async function (req: Request, res: Response) {
       (book) => book.price >= prices[0] && book.price <= prices[1]
     );
 
-    const allBooks = filterByPrice.slice(startIndex, endIndex);
-    const totalCount = filterByPrice.length;
-    const totalPages = Math.ceil(filterByPrice.length / take);
+    const filteredResults = filterByPrice.filter(
+      (book) =>
+        book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        book.author?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    const allBooks = filteredResults.slice(startIndex, endIndex);
+    const totalCount = filteredResults.length;
+    const totalPages = Math.ceil(filteredResults.length / take);
 
     res.status(200).json({ allBooks, totalCount, totalPages });
   } catch (error) {
@@ -346,7 +398,7 @@ export const getItemsForAuthorized = async function (
   req: RequestWithUser,
   res: Response
 ) {
-  const { ids } = req.body;
+  const { ids, searchQuery } = req.body;
   const user = req.user;
   const page = req.body.page;
   const take = 4;
@@ -407,6 +459,7 @@ export const getItemsForAuthorized = async function (
           liked: lukas,
           average: average,
           date: book.date,
+          cover: book.cover,
         };
         booksWithRateAndHolders.push(defaultBook);
       }
@@ -444,10 +497,14 @@ export const getItemsForAuthorized = async function (
             .sort(sortByField("price"));
           break;
       }
-
-      const allBooks = sortedData.slice(startIndex, endIndex);
-      const totalCount = sortedData.length;
-      const totalPages = Math.ceil(sortedData.length / take);
+      const filteredResults = sortedData.filter(
+        (book) =>
+          book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          book.author?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      const allBooks = filteredResults.slice(startIndex, endIndex);
+      const totalCount = filteredResults.length;
+      const totalPages = Math.ceil(filteredResults.length / take);
 
       return res.status(200).json({ allBooks, totalCount, totalPages });
     }
@@ -520,6 +577,7 @@ export const getItemsForAuthorized = async function (
         liked: lukas,
         average,
         date: book.date,
+        cover: book.cover,
       };
       return finallyBook;
     });
@@ -550,9 +608,14 @@ export const getItemsForAuthorized = async function (
       (book) => book.price >= prices[0] && book.price <= prices[1]
     );
 
-    const allBooks = filterByPrice.slice(startIndex, endIndex);
-    const totalCount = filterByPrice.length;
-    const totalPages = Math.ceil(filterByPrice.length / take);
+    const filteredResults = filterByPrice.filter(
+      (book) =>
+        book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        book.author?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    const allBooks = filteredResults.slice(startIndex, endIndex);
+    const totalCount = filteredResults.length;
+    const totalPages = Math.ceil(filteredResults.length / take);
 
     res.status(200).json({ allBooks, totalCount, totalPages });
   } catch (error) {
@@ -852,6 +915,7 @@ export const getRecommendations = async function (
           liked: false,
           date: book.booksId.date,
           average,
+          cover: book.booksId.cover
         };
       })
     );
@@ -947,6 +1011,7 @@ export const getRecommendationsForAuth = async function (
           liked: lukas,
           date: book.booksId.date,
           average,
+          cover: book.booksId.cover
         };
       })
     );
