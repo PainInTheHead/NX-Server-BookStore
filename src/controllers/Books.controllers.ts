@@ -115,7 +115,7 @@ export const getCurrentBook = async function (req: Request, res: Response) {
       cover: currentBook.cover,
     });
   } catch (error) {
-     res.status(404).json({ message: "Такой пользователь уже существует" });
+    res.status(404).json({ message: "Такой пользователь уже существует" });
   }
 };
 
@@ -756,6 +756,7 @@ export const getBooksOfCarts = async function (
           price: book.price,
           author: book.auth.author_name,
           count: bookcart.count,
+          cover: book.cover,
         });
       })
     );
@@ -798,6 +799,7 @@ export const getUserRatingCurrentBook = async function (
 
 export const newComment = async function (req: RequestWithUser, res: Response) {
   try {
+    const today = new Date();
     const book = await bookRepo.findOne({
       where: {
         id: req.body.bookId,
@@ -808,14 +810,39 @@ export const newComment = async function (req: RequestWithUser, res: Response) {
       value: req.body.text,
       user: req.user,
       book: book,
+      date: new Date(),
     });
 
-    await commentRepo.save(newCom);
+    const savedCom = await commentRepo.save(newCom);
+
+    let timeAgo: string;
+    const diffTime = Math.abs(today.getTime() - savedCom.date.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const diffMinutes = Math.ceil(diffTime / (1000 * 60));
+    if (diffMinutes < 1) {
+      timeAgo = "сейчас";
+    } else if (diffMinutes < 60) {
+      if (diffMinutes === 1) {
+        timeAgo = "минуту назад";
+      } else {
+        timeAgo = `${diffMinutes} минут назад`;
+      }
+    } else if (diffMinutes < 120) {
+      timeAgo = "час назад";
+    } else if (diffMinutes < 1440) {
+      const diffHours = Math.floor(diffMinutes / 60);
+      timeAgo = `${diffHours} ${diffHours === 1 ? "час" : "часа"} назад`;
+    } else {
+      const diffDays = Math.ceil(diffMinutes / 60 / 24);
+      timeAgo = `${diffDays} ${diffDays === 1 ? "день" : "дня"} назад`;
+    }
+
     res.status(200).json({
       id: newCom.id,
       value: newCom.value,
       avatar: newCom.user.avatar,
       username: newCom.user.userName,
+      timeAgo: timeAgo,
     });
   } catch (error) {
     res.status(404).json({ message: "Такой пользователь уже существует" });
@@ -827,6 +854,7 @@ export const getCommentForCurrentBook = async function (
   res: Response
 ) {
   try {
+    const today = new Date();
     const comments = await commentRepo.find({
       where: {
         book: { id: Number(req.query.bookId) },
@@ -837,11 +865,33 @@ export const getCommentForCurrentBook = async function (
       res.status(200).json([]);
     } else {
       const allComments = comments.map((comment) => {
+        let timeAgo: string;
+        const diffTime = Math.abs(today.getTime() - comment.date.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        const diffMinutes = Math.ceil(diffTime / (1000 * 60));
+        if (diffMinutes < 1) {
+          timeAgo = "сейчас";
+        } else if (diffMinutes < 60) {
+          if (diffMinutes === 1) {
+            timeAgo = "минуту назад";
+          } else {
+            timeAgo = `${diffMinutes} минут назад`;
+          }
+        } else if (diffMinutes < 120) {
+          timeAgo = "час назад";
+        } else if (diffMinutes < 1440) {
+          const diffHours = Math.floor(diffMinutes / 60);
+          timeAgo = `${diffHours} ${diffHours === 1 ? "час" : "часа"} назад`;
+        } else {
+          const diffDays = Math.ceil(diffMinutes / 60 / 24);
+          timeAgo = `${diffDays} ${diffDays === 1 ? "день" : "дня"} назад`;
+        }
         return {
           id: comment.id,
           value: comment.value,
           avatar: comment.user.avatar,
           username: comment.user.userName,
+          timeAgo: timeAgo,
         };
       });
       res.status(200).json(allComments);
@@ -915,7 +965,7 @@ export const getRecommendations = async function (
           liked: false,
           date: book.booksId.date,
           average,
-          cover: book.booksId.cover
+          cover: book.booksId.cover,
         };
       })
     );
@@ -1011,7 +1061,7 @@ export const getRecommendationsForAuth = async function (
           liked: lukas,
           date: book.booksId.date,
           average,
-          cover: book.booksId.cover
+          cover: book.booksId.cover,
         };
       })
     );

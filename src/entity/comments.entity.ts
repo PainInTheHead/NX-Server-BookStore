@@ -17,6 +17,9 @@ import {
   
     @Column()
     value: string;
+
+    @Column()
+    date: Date;
   
     @ManyToOne(() => Book, (book) => book.comments)
     @JoinColumn()
