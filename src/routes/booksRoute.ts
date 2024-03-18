@@ -4,7 +4,6 @@ import { createGenre, getGenres } from "../controllers/Genre";
 import {
   bookCreate,
   getItems,
-  getItemsWithGenre,
   changeRatingOfBook,
   getRatingOfBook,
   addBookToFavorites,
@@ -19,21 +18,20 @@ import {
   getCurrentBook,
 } from "../controllers/Books.controllers";
 import { verifyToken } from "../midleware/verifytoken";
+import { verifyUser } from "../midleware/getUser";
 
 const router = Router();
 
 router.post("/createGenre", createGenre);
 router.post("/booksCreate", bookCreate);
-// router.post("/booksGenry", putGenreBooks);
 router.get("/getitems", getItems);
-router.post("/getitemsGenre", getItemsWithGenre);
 router.post("/changeRatingOfBook", verifyToken, changeRatingOfBook);
 router.post("/newComment", verifyToken, newComment);
 router.get("/getRatingOfBook", getRatingOfBook);
 router.get("/getCommentForCurrentBook", getCommentForCurrentBook);
 router.post("/addBookToFavorites", verifyToken, addBookToFavorites);
 router.post("/addBookToCart", verifyToken, addBookToCart);
-router.post("/getItemsForAuthorized", verifyToken, getItemsForAuthorized);
+router.post("/getItemsForAuthorized", verifyUser, getItemsForAuthorized);
 router.get("/getUserRatingCurrentBook", verifyToken, getUserRatingCurrentBook);
 router.get("/getBooksOfCarts", verifyToken, getBooksOfCarts);
 router.post("/getRecommendations", getRecommendations);

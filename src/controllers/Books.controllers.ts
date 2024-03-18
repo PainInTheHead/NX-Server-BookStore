@@ -92,6 +92,7 @@ export const getCurrentBook = async function (req: Request, res: Response) {
       where: {
         id: Number(id),
       },
+      relations: ["auth"],
     });
     const rate = await rateRepo.findBy({ book: { id: currentBook.id } });
     const sum = rate.reduce(
@@ -204,196 +205,6 @@ export const getRatingOfBook = async function (
   }
 };
 
-export const getItemsWithGenre = async function (req: Request, res: Response) {
-  const { ids, searchQuery } = req.body;
-  const page = req.body.page;
-  const take = 4;
-  const prices = req.body.prices;
-  const startIndex = isNaN(page) ? 0 : (page - 1) * take;
-  const endIndex = startIndex + take;
-  const sortBy: "Price" | "Name" | "Author_name" | "Rating" | "Date_of_issue" =
-    req.body.sortBy;
-  try {
-    if (!ids[0]) {
-      const books = await bookRepo.find({
-        where: {
-          price: Between(prices[0], prices[1]),
-        },
-        relations: ["rates", "genre", "auth"],
-      });
-
-      let booksWithRateAndHolders = [];
-      for (let i = 0; i < books.length; i++) {
-        const book = books[i];
-
-        const rate = await rateRepo.findBy({ book: { id: book.id } });
-        const sum = rate.reduce(
-          (accumulator, currentValue) => accumulator + currentValue.value,
-          0
-        );
-        let average = Math.round(sum / rate.length);
-        if (!average) {
-          average = 0;
-        }
-
-        const defaultBook = {
-          bookId: book.id,
-          title: book.title,
-          description: book.description,
-          price: book.price,
-          author: book.auth?.author_name,
-          liked: book.liked,
-          average: average,
-          date: book.date,
-          cover: book.cover,
-        };
-        booksWithRateAndHolders.push(defaultBook);
-      }
-
-      let sortedData = [];
-      switch (sortBy) {
-        case "Price":
-          sortedData = booksWithRateAndHolders
-            .slice()
-            .sort(sortByField("price"));
-          break;
-        case "Name":
-          sortedData = booksWithRateAndHolders
-            .slice()
-            .sort(sortByField("title"));
-          break;
-        case "Author_name":
-          sortedData = booksWithRateAndHolders
-            .slice()
-            .sort(sortByField("author"));
-          break;
-        case "Rating":
-          sortedData = booksWithRateAndHolders
-            .slice()
-            .sort(sortByField("average"));
-          break;
-        case "Date_of_issue":
-          sortedData = booksWithRateAndHolders
-            .slice()
-            .sort(sortByField("date"));
-          break;
-        default:
-          sortedData = booksWithRateAndHolders
-            .slice()
-            .sort(sortByField("price"));
-          break;
-      }
-
-      const filteredResults = sortedData.filter(
-        (book) =>
-          book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          book.author?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-
-      const allBooks = filteredResults.slice(startIndex, endIndex);
-      const totalCount = filteredResults.length;
-      const totalPages = Math.ceil(filteredResults.length / take);
-
-      return res.status(200).json({ allBooks, totalCount, totalPages });
-    }
-
-    const filterPromise = ids.map(async (id) => {
-      const filter = await bookGenreRepo.find({
-        where: {
-          genres: { id: id },
-        },
-        relations: { booksId: true },
-      });
-      return filter;
-    });
-    const genreFilters = (await Promise.all(filterPromise)).flat();
-
-    const uniqueBooksId = [];
-    const FILTER = genreFilters.filter((filter) => {
-      if (!uniqueBooksId.includes(filter.booksId.id)) {
-        uniqueBooksId.push(filter.booksId.id);
-        return true;
-      }
-      return false;
-    });
-
-    const filteredAllBooksPromises = FILTER.map(async (ids) => {
-      const id = ids.id;
-      const filtered = await bookRepo.findOne({
-        where: {
-          genre: { id: id },
-        },
-        relations: { auth: true },
-        select: {
-          auth: { author_name: true },
-        },
-      });
-      const rate = await rateRepo.findBy({ book: { id: filtered.id } });
-      const sum = rate.reduce(
-        (accumulator, currentValue) => accumulator + currentValue.value,
-        0
-      );
-      let average = Math.round(sum / rate.length);
-      if (!average) {
-        average = 0;
-      }
-      const finallyBook = {
-        bookId: filtered.id,
-        title: filtered.title,
-        description: filtered.description,
-        price: filtered.price,
-        author: filtered.auth?.author_name,
-        liked: filtered.liked,
-        average,
-        date: filtered.date,
-        cover: filtered.cover,
-      };
-      return finallyBook;
-    });
-    const filteredAllBooks = await Promise.all(filteredAllBooksPromises);
-
-    let sortedData = [];
-    switch (sortBy) {
-      case "Price":
-        sortedData = filteredAllBooks.slice().sort(sortByField("price"));
-        break;
-      case "Name":
-        sortedData = filteredAllBooks.slice().sort(sortByField("title"));
-        break;
-      case "Author_name":
-        sortedData = filteredAllBooks.slice().sort(sortByField("author"));
-        break;
-      case "Rating":
-        sortedData = filteredAllBooks.slice().sort(sortByField("average"));
-        break;
-      case "Date_of_issue":
-        sortedData = filteredAllBooks.slice().sort(sortByField("date"));
-        break;
-      default:
-        sortedData = filteredAllBooks.slice().sort(sortByField("price"));
-        break;
-    }
-
-    const filterByPrice = sortedData.filter(
-      (book) => book.price >= prices[0] && book.price <= prices[1]
-    );
-
-    const filteredResults = filterByPrice.filter(
-      (book) =>
-        book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        book.author?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    const allBooks = filteredResults.slice(startIndex, endIndex);
-    const totalCount = filteredResults.length;
-    const totalPages = Math.ceil(filteredResults.length / take);
-
-    res.status(200).json({ allBooks, totalCount, totalPages });
-  } catch (error) {
-    res.status(404).json({ message: "Такой пользователь уже существует" });
-  }
-};
-
 export const getItemsForAuthorized = async function (
   req: RequestWithUser,
   res: Response
@@ -431,23 +242,23 @@ export const getItemsForAuthorized = async function (
         if (!average) {
           average = 0;
         }
-
-        const Favorites = await favoritesRepo.findOne({
-          where: {
-            userId: user,
-          },
-        });
-
-        const FavoritesBook = await favBookRepo.findOne({
-          where: {
-            book: book,
-            favorites: Favorites,
-          },
-        });
-
         let lukas = false;
-        if (FavoritesBook) {
-          lukas = true;
+        if (req.user) {
+          const Favorites = await favoritesRepo.findOne({
+            where: {
+              userId: user,
+            },
+          });
+
+          const FavoritesBook = await favBookRepo.findOne({
+            where: {
+              book: book,
+              favorites: Favorites,
+            },
+          });
+          if (FavoritesBook) {
+            lukas = true;
+          }
         }
 
         const defaultBook = {
@@ -550,22 +361,24 @@ export const getItemsForAuthorized = async function (
         average = 0;
       }
 
-      const Favorites = await favoritesRepo.findOne({
-        where: {
-          userId: user,
-        },
-      });
-
-      const FavoritesBook = await favBookRepo.findOne({
-        where: {
-          book: book,
-          favorites: Favorites,
-        },
-      });
-
       let lukas = false;
-      if (FavoritesBook) {
-        lukas = true;
+      if (req.user) {
+        const Favorites = await favoritesRepo.findOne({
+          where: {
+            userId: user,
+          },
+        });
+
+        const FavoritesBook = await favBookRepo.findOne({
+          where: {
+            book: book,
+            favorites: Favorites,
+          },
+        });
+
+        if (FavoritesBook) {
+          lukas = true;
+        }
       }
 
       const finallyBook = {
@@ -1072,3 +885,193 @@ export const getRecommendationsForAuth = async function (
     res.status(404).json({ message: "Такой пользователь уже существует" });
   }
 };
+
+// export const getItemsWithGenre = async function (req: Request, res: Response) {
+//   const { ids, searchQuery } = req.body;
+//   const page = req.body.page;
+//   const take = 4;
+//   const prices = req.body.prices;
+//   const startIndex = isNaN(page) ? 0 : (page - 1) * take;
+//   const endIndex = startIndex + take;
+//   const sortBy: "Price" | "Name" | "Author_name" | "Rating" | "Date_of_issue" =
+//     req.body.sortBy;
+//   try {
+//     if (!ids[0]) {
+//       const books = await bookRepo.find({
+//         where: {
+//           price: Between(prices[0], prices[1]),
+//         },
+//         relations: ["rates", "genre", "auth"],
+//       });
+
+//       let booksWithRateAndHolders = [];
+//       for (let i = 0; i < books.length; i++) {
+//         const book = books[i];
+
+//         const rate = await rateRepo.findBy({ book: { id: book.id } });
+//         const sum = rate.reduce(
+//           (accumulator, currentValue) => accumulator + currentValue.value,
+//           0
+//         );
+//         let average = Math.round(sum / rate.length);
+//         if (!average) {
+//           average = 0;
+//         }
+
+//         const defaultBook = {
+//           bookId: book.id,
+//           title: book.title,
+//           description: book.description,
+//           price: book.price,
+//           author: book.auth?.author_name,
+//           liked: book.liked,
+//           average: average,
+//           date: book.date,
+//           cover: book.cover,
+//         };
+//         booksWithRateAndHolders.push(defaultBook);
+//       }
+
+//       let sortedData = [];
+//       switch (sortBy) {
+//         case "Price":
+//           sortedData = booksWithRateAndHolders
+//             .slice()
+//             .sort(sortByField("price"));
+//           break;
+//         case "Name":
+//           sortedData = booksWithRateAndHolders
+//             .slice()
+//             .sort(sortByField("title"));
+//           break;
+//         case "Author_name":
+//           sortedData = booksWithRateAndHolders
+//             .slice()
+//             .sort(sortByField("author"));
+//           break;
+//         case "Rating":
+//           sortedData = booksWithRateAndHolders
+//             .slice()
+//             .sort(sortByField("average"));
+//           break;
+//         case "Date_of_issue":
+//           sortedData = booksWithRateAndHolders
+//             .slice()
+//             .sort(sortByField("date"));
+//           break;
+//         default:
+//           sortedData = booksWithRateAndHolders
+//             .slice()
+//             .sort(sortByField("price"));
+//           break;
+//       }
+
+//       const filteredResults = sortedData.filter(
+//         (book) =>
+//           book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+//           book.author?.toLowerCase().includes(searchQuery.toLowerCase())
+//       );
+
+//       const allBooks = filteredResults.slice(startIndex, endIndex);
+//       const totalCount = filteredResults.length;
+//       const totalPages = Math.ceil(filteredResults.length / take);
+
+//       return res.status(200).json({ allBooks, totalCount, totalPages });
+//     }
+
+//     const filterPromise = ids.map(async (id) => {
+//       const filter = await bookGenreRepo.find({
+//         where: {
+//           genres: { id: id },
+//         },
+//         relations: { booksId: true },
+//       });
+//       return filter;
+//     });
+//     const genreFilters = (await Promise.all(filterPromise)).flat();
+
+//     const uniqueBooksId = [];
+//     const FILTER = genreFilters.filter((filter) => {
+//       if (!uniqueBooksId.includes(filter.booksId.id)) {
+//         uniqueBooksId.push(filter.booksId.id);
+//         return true;
+//       }
+//       return false;
+//     });
+
+//     const filteredAllBooksPromises = FILTER.map(async (ids) => {
+//       const id = ids.id;
+//       const filtered = await bookRepo.findOne({
+//         where: {
+//           genre: { id: id },
+//         },
+//         relations: { auth: true },
+//         select: {
+//           auth: { author_name: true },
+//         },
+//       });
+//       const rate = await rateRepo.findBy({ book: { id: filtered.id } });
+//       const sum = rate.reduce(
+//         (accumulator, currentValue) => accumulator + currentValue.value,
+//         0
+//       );
+//       let average = Math.round(sum / rate.length);
+//       if (!average) {
+//         average = 0;
+//       }
+//       const finallyBook = {
+//         bookId: filtered.id,
+//         title: filtered.title,
+//         description: filtered.description,
+//         price: filtered.price,
+//         author: filtered.auth?.author_name,
+//         liked: filtered.liked,
+//         average,
+//         date: filtered.date,
+//         cover: filtered.cover,
+//       };
+//       return finallyBook;
+//     });
+//     const filteredAllBooks = await Promise.all(filteredAllBooksPromises);
+
+//     let sortedData = [];
+//     switch (sortBy) {
+//       case "Price":
+//         sortedData = filteredAllBooks.slice().sort(sortByField("price"));
+//         break;
+//       case "Name":
+//         sortedData = filteredAllBooks.slice().sort(sortByField("title"));
+//         break;
+//       case "Author_name":
+//         sortedData = filteredAllBooks.slice().sort(sortByField("author"));
+//         break;
+//       case "Rating":
+//         sortedData = filteredAllBooks.slice().sort(sortByField("average"));
+//         break;
+//       case "Date_of_issue":
+//         sortedData = filteredAllBooks.slice().sort(sortByField("date"));
+//         break;
+//       default:
+//         sortedData = filteredAllBooks.slice().sort(sortByField("price"));
+//         break;
+//     }
+
+//     const filterByPrice = sortedData.filter(
+//       (book) => book.price >= prices[0] && book.price <= prices[1]
+//     );
+
+//     const filteredResults = filterByPrice.filter(
+//       (book) =>
+//         book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+//         book.author?.toLowerCase().includes(searchQuery.toLowerCase())
+//     );
+
+//     const allBooks = filteredResults.slice(startIndex, endIndex);
+//     const totalCount = filteredResults.length;
+//     const totalPages = Math.ceil(filteredResults.length / take);
+
+//     res.status(200).json({ allBooks, totalCount, totalPages });
+//   } catch (error) {
+//     res.status(404).json({ message: "Такой пользователь уже существует" });
+//   }
+// };

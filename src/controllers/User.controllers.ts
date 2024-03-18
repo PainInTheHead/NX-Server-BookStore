@@ -182,12 +182,16 @@ export const changePasswordUser = async function (
   res: Response
 ) {
   const userId = req.user.id;
-  const { Password } = req.body;
+  const { Password, oldPassword } = req.body;
 
   try {
     const currentUser = await userRepo.findOneBy({ id: userId });
     if (!currentUser) {
       return;
+    }
+    const decryptPass = bcrypt.compareSync(oldPassword, currentUser.password);
+    if (!decryptPass) {
+      return res.status(401).json({ message: "Старый пароль указан неверно!" });
     }
     currentUser.password = bcrypt.hashSync(Password, salt);
     await userRepo.save(currentUser);
