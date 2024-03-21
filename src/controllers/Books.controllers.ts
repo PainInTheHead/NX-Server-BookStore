@@ -99,9 +99,11 @@ export const getCurrentBook = async function (req: Request, res: Response) {
       (accumulator, currentValue) => accumulator + currentValue.value,
       0
     );
-    let average = Math.round(sum / rate.length);
+
+    let average = sum / rate.length;
+    let roundedAverage = Math.round(average * 10) / 10;
     if (!average) {
-      average = 0;
+      roundedAverage = 0;
     }
 
     res.status(200).json({
@@ -111,7 +113,7 @@ export const getCurrentBook = async function (req: Request, res: Response) {
       price: currentBook.price,
       author: currentBook.auth?.author_name,
       liked: currentBook.liked,
-      average: average,
+      average: roundedAverage,
       date: currentBook.date,
       cover: currentBook.cover,
     });
@@ -197,8 +199,10 @@ export const getRatingOfBook = async function (
         (accumulator, currentValue) => accumulator + currentValue.value,
         0
       );
-      const average = Math.round(sum / rate.length);
-      res.status(200).json({ rate: average, book: book });
+
+      let average = sum / rate.length;
+      let roundedAverage = Math.round(average * 10) / 10;
+      res.status(200).json({ rate: roundedAverage, book: book });
     }
   } catch (error) {
     res.status(404).json({ message: "Такой пользователь уже существует" });
@@ -212,8 +216,8 @@ export const getItemsForAuthorized = async function (
   const { ids, searchQuery } = req.body;
   const user = req.user;
   const page = req.body.page;
-  const take = 4;
-  const prices = req.body.prices;
+  const take = 8;
+  const prices = req.body.prices
   const startIndex = isNaN(page) ? 0 : (page - 1) * take;
   const endIndex = startIndex + take;
   const sortBy: "Price" | "Name" | "Author_name" | "Rating" | "Date_of_issue" =
@@ -223,7 +227,7 @@ export const getItemsForAuthorized = async function (
     if (!ids[0]) {
       const books = await bookRepo.find({
         where: {
-          price: Between(prices[0], prices[1]),
+          price: Between(prices[0], prices[1] * 100),
         },
         relations: ["rates", "genre", "auth"],
       });
@@ -238,9 +242,10 @@ export const getItemsForAuthorized = async function (
           0
         );
 
-        let average = Math.round(sum / rate.length);
+        let average = sum / rate.length;
+        let roundedAverage = Math.round(average * 10) / 10;
         if (!average) {
-          average = 0;
+          roundedAverage = 0;
         }
         let lukas = false;
         if (req.user) {
@@ -268,7 +273,7 @@ export const getItemsForAuthorized = async function (
           price: book.price,
           author: book.auth?.author_name,
           liked: lukas,
-          average: average,
+          average: roundedAverage,
           date: book.date,
           cover: book.cover,
         };
@@ -356,9 +361,11 @@ export const getItemsForAuthorized = async function (
         (accumulator, currentValue) => accumulator + currentValue.value,
         0
       );
-      let average = Math.round(sum / rate.length);
+
+      let average = sum / rate.length;
+      let roundedAverage = Math.round(average * 10) / 10;
       if (!average) {
-        average = 0;
+        roundedAverage = 0;
       }
 
       let lukas = false;
@@ -388,7 +395,7 @@ export const getItemsForAuthorized = async function (
         price: book.price,
         author: book.auth?.author_name,
         liked: lukas,
-        average,
+        roundedAverage,
         date: book.date,
         cover: book.cover,
       };
@@ -418,7 +425,7 @@ export const getItemsForAuthorized = async function (
     }
 
     const filterByPrice = sortedData.filter(
-      (book) => book.price >= prices[0] && book.price <= prices[1]
+      (book) => book.price >= prices[0] && book.price <= (prices[1] * 100)
     );
 
     const filteredResults = filterByPrice.filter(
@@ -763,7 +770,8 @@ export const getRecommendations = async function (
           { sum: 0, count: 0 }
         );
 
-        const average = sum.count > 0 ? Math.round(sum.sum / sum.count) : 0;
+        const average = sum.count > 0 ? sum.sum / sum.count : 0;
+        const roundedAverage = Math.round(average * 10) / 10;
         const authName = await authRepo.findOne({
           where: {
             book: book.booksId,
@@ -777,13 +785,15 @@ export const getRecommendations = async function (
           author: authName.author_name,
           liked: false,
           date: book.booksId.date,
-          average,
+          roundedAverage,
           cover: book.booksId.cover,
         };
       })
     );
 
-    const sortedData = result.sort((a, b) => b.average - a.average).slice(0, 4);
+    const sortedData = result
+      .sort((a, b) => b.roundedAverage - a.roundedAverage)
+      .slice(0, 4);
     res.status(200).json(sortedData);
   } catch (error) {
     res.status(404).json({ message: "Такой пользователь уже существует" });
