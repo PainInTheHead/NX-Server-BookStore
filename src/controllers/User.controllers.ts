@@ -1,6 +1,6 @@
 import { User } from "../entity/user.entity";
 import { myDataSource } from "./../../app-data-source";
-import { Request, Response } from "express";
+import { NextFunction, Request, Response } from "express";
 import * as bcrypt from "bcryptjs";
 const jwt = require("jsonwebtoken");
 import { RequestWithUser } from "../Types/req.user";
@@ -8,20 +8,25 @@ import * as fs from "fs";
 import { Favorites } from "../entity/favorites.entity";
 import { Cart } from "../entity/cart.entity";
 const path = require("path");
+import { StatusCodes } from "http-status-codes";
+import { CustomError } from "../midleware/errorHandler";
+
 
 const userRepo = myDataSource.getRepository(User);
 const favoriteRepo = myDataSource.getRepository(Favorites);
 const cartRepo = myDataSource.getRepository(Cart);
 const salt = bcrypt.genSaltSync(10);
 
-export const userRegister = async function (req: Request, res: Response) {
+export const userRegister = async function (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
   const { email, password } = req.body;
   try {
     const newUser = await userRepo.findOneBy({ email: email });
     if (newUser) {
-      return res
-        .status(409)
-        .json({ message: "this email in now moment is be registed" });
+      throw new CustomError("This user already exists", StatusCodes.CONFLICT);
     }
 
     const user = myDataSource.getRepository(User).create({
@@ -48,21 +53,27 @@ export const userRegister = async function (req: Request, res: Response) {
     });
     res.status(201).json({ user: userWithFavorites, favorites });
   } catch (error) {
-    console.error(error);
-    res.status(404).json({ message: "Такой пользователь уже существует" });
+    next(error);
   }
 };
 
-export const userLogin = async function (req: Request, res: Response) {
+export const userLogin = async function (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
   const { email, password } = req.body;
   try {
     const user = await userRepo.findOneBy({ email: email });
     if (!user) {
-      return;
+     throw new CustomError("This user does not exist", StatusCodes.BAD_REQUEST);
     }
     const decryptPass = bcrypt.compareSync(password, user.password);
     if (!decryptPass) {
-      return res.status(401).json({ message: "неверный логин или пароль" });
+       throw new CustomError(
+         "Invalid authentication details",
+         StatusCodes.BAD_REQUEST
+       );
     }
     const token = jwt.sign(
       {
@@ -83,55 +94,58 @@ export const userLogin = async function (req: Request, res: Response) {
       favorites: favorites.id,
     });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "Внутренняя ошибка сервера" });
+     next(error);
   }
 };
 
-export const getUser = async function (req: RequestWithUser, res: Response) {
+export const getUser = async function (
+  req: RequestWithUser,
+  res: Response,
+  next: NextFunction
+) {
   const userFromToken = req.user;
   try {
     const user = await userRepo.findOneBy({ id: userFromToken.id });
     if (!user) {
-      return;
+      throw new CustomError("Authorisation Error", StatusCodes.UNAUTHORIZED);
     }
     const { userName, email, avatar, id } = user;
     res.json({ userName, email, avatar, id });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Внутренняя ошибка сервера" });
+    next(error);
   }
 };
 
 export const userMakeAva = async function (
   req: RequestWithUser,
-  res: Response
+  res: Response,
+  next: NextFunction
 ) {
   try {
     const { id, avatar } = req.body;
 
     const user = await userRepo.findOneBy({ id: id });
     if (!user) {
-      return res.status(404).json({ message: "Пользователь не найден" });
+      throw new CustomError("Authorisation Error", StatusCodes.UNAUTHORIZED);
     }
     user.avatar = avatar;
     await myDataSource.getRepository(User).save(user);
     res.status(200).json({ message: "Аватар изменен" });
   } catch (error) {
-    console.error("Ошибка сервера:", error);
-    res.status(500).json({ message: "Внутренняя ошибка сервера" });
+     next(error);
   }
 };
 
 export const userFormDataAvatar = async function (
   req: RequestWithUser,
-  res: Response
+  res: Response,
+  next: NextFunction
 ) {
   try {
     const userFromToken = req.user;
     const user = await userRepo.findOneBy({ id: userFromToken.id });
     if (!user) {
-      return;
+       throw new CustomError("Authorisation Error", StatusCodes.UNAUTHORIZED);
     }
     const oldAvatarPath = user.avatar;
     user.avatar = req.file.filename;
@@ -141,29 +155,29 @@ export const userFormDataAvatar = async function (
       const filePath = path.join(__dirname, "../uploads", oldAvatarPath);
       fs.unlink(filePath, (err) => {
         if (err) {
-          console.error("Ошибка при удалении файла:", err);
+          console.error("Error when deleting file:", err);
         } else {
-          console.log("Файл успешно удален");
+          console.log("File deleted successfully");
         }
       });
     }
     res.status(200).json({ filename: req.file.filename });
   } catch (error) {
-    console.error("Ошибка сервера:", error);
-    res.status(500).json({ message: "Внутренняя ошибка сервера" });
+    next(error);
   }
 };
 
 export const changeInfoAboutUser = async function (
   req: RequestWithUser,
-  res: Response
+  res: Response,
+  next: NextFunction
 ) {
   const userId = req.user.id;
   const { Email, UserName } = req.body;
   try {
     const currentUser = await userRepo.findOneBy({ id: userId });
     if (!currentUser) {
-      return;
+      throw new CustomError("Authorisation Error", StatusCodes.UNAUTHORIZED);
     }
     currentUser.email = Email;
     currentUser.userName = UserName;
@@ -172,14 +186,14 @@ export const changeInfoAboutUser = async function (
       .status(200)
       .json({ email: currentUser.email, userName: currentUser.userName });
   } catch (error) {
-    console.error("Ошибка сервера:", error);
-    res.status(500).json({ message: "Внутренняя ошибка сервера" });
+   next(error)
   }
 };
 
 export const changePasswordUser = async function (
   req: RequestWithUser,
-  res: Response
+  res: Response,
+  next: NextFunction
 ) {
   const userId = req.user.id;
   const { Password, oldPassword } = req.body;
@@ -187,17 +201,19 @@ export const changePasswordUser = async function (
   try {
     const currentUser = await userRepo.findOneBy({ id: userId });
     if (!currentUser) {
-      return;
+      throw new CustomError("Authorisation Error", StatusCodes.UNAUTHORIZED);
     }
     const decryptPass = bcrypt.compareSync(oldPassword, currentUser.password);
     if (!decryptPass) {
-      return res.status(401).json({ message: "Старый пароль указан неверно!" });
+     throw new CustomError(
+       "The old password is incorrect",
+       StatusCodes.BAD_REQUEST
+     );;
     }
     currentUser.password = bcrypt.hashSync(Password, salt);
     await userRepo.save(currentUser);
     res.status(200).json({ Password: Password });
   } catch (error) {
-    console.error("Ошибка сервера:", error);
-    res.status(500).json({ message: "Внутренняя ошибка сервера" });
+    next(error);
   }
 };

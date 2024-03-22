@@ -1,6 +1,6 @@
 import { User } from "../entity/user.entity";
 import { myDataSource } from "./../../app-data-source";
-import { Request, Response } from "express";
+import { NextFunction, Request, Response } from "express";
 import { RequestWithUser } from "../Types/req.user";
 import { Book } from "../entity/book.entity";
 import { GenreBook } from "../entity/genre-books.entity";
@@ -14,6 +14,8 @@ import { sortByField } from "../utils/books";
 import { Cart } from "../entity/cart.entity";
 import { CartBook } from "../entity/cart_book.entity";
 import { Comments } from "../entity/comments.entity";
+import { CustomError } from "../midleware/errorHandler";
+import { StatusCodes } from "http-status-codes";
 const bookRepo = myDataSource.getRepository(Book);
 const bookGenreRepo = myDataSource.getRepository(GenreBook);
 const genreRepo = myDataSource.getRepository(Genre);
@@ -25,7 +27,11 @@ const cartRepo = myDataSource.getRepository(Cart);
 const cartBookRepo = myDataSource.getRepository(CartBook);
 const commentRepo = myDataSource.getRepository(Comments);
 
-export const bookCreate = async function (req: Request, res: Response) {
+export const bookCreate = async function (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
   const { title, description, price, auth } = req.body;
   try {
     const genreIds = req.body.genre;
@@ -45,7 +51,10 @@ export const bookCreate = async function (req: Request, res: Response) {
       genreIds.map(async (id) => {
         const genre = await genreRepo.findOne({ where: { id: id } });
         if (!genre) {
-          throw new Error(`Жанр с id ${id} не найден`);
+          throw new CustomError(
+            "Genre not found, try again with other genres",
+            StatusCodes.NOT_FOUND
+          );
         }
         return genre;
       })
@@ -80,12 +89,15 @@ export const bookCreate = async function (req: Request, res: Response) {
 
     res.status(200).json(finallyBook);
   } catch (error) {
-    console.error(error);
-    res.status(404).json({ message: "Такой пользователь уже существует" });
+    next(error);
   }
 };
 
-export const getCurrentBook = async function (req: Request, res: Response) {
+export const getCurrentBook = async function (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
   const id = req.params.id;
   try {
     const currentBook = await bookRepo.findOne({
@@ -94,6 +106,9 @@ export const getCurrentBook = async function (req: Request, res: Response) {
       },
       relations: ["auth"],
     });
+    if (!currentBook) {
+      throw new CustomError("Books not found", StatusCodes.NOT_FOUND);
+    }
     const rate = await rateRepo.findBy({ book: { id: currentBook.id } });
     const sum = rate.reduce(
       (accumulator, currentValue) => accumulator + currentValue.value,
@@ -118,11 +133,15 @@ export const getCurrentBook = async function (req: Request, res: Response) {
       cover: currentBook.cover,
     });
   } catch (error) {
-    res.status(404).json({ message: "Такой пользователь уже существует" });
+    next(error);
   }
 };
 
-export const getItems = async function (req: Request, res: Response) {
+export const getItems = async function (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
   try {
     const currentBook = await bookRepo.find({ relations: ["rates", "genre"] });
     const currentGenre = await genreRepo.find();
@@ -138,13 +157,14 @@ export const getItems = async function (req: Request, res: Response) {
       Rates,
     });
   } catch (error) {
-    res.status(404).json({ message: "Такой пользователь уже существует" });
+    next(error);
   }
 };
 
 export const changeRatingOfBook = async function (
   req: RequestWithUser,
-  res: Response
+  res: Response,
+  next: NextFunction
 ) {
   try {
     const book = await bookRepo.findOne({
@@ -152,6 +172,9 @@ export const changeRatingOfBook = async function (
         id: req.body.bookId,
       },
     });
+    if (!book) {
+      throw new CustomError("Books not found", StatusCodes.NOT_FOUND);
+    }
     const rate = await rateRepo.findOne({
       where: {
         user: req.user,
@@ -171,13 +194,14 @@ export const changeRatingOfBook = async function (
     await rateRepo.save(rateNew);
     res.status(200).json(rateNew);
   } catch (error) {
-    res.status(404).json({ message: "Такой пользователь уже существует" });
+    next(error);
   }
 };
 
 export const getRatingOfBook = async function (
   req: RequestWithUser,
-  res: Response
+  res: Response,
+  next: NextFunction
 ) {
   try {
     const rate = await rateRepo.find({
@@ -192,8 +216,11 @@ export const getRatingOfBook = async function (
       },
       relations: ["rates"],
     });
+    if (!book) {
+      throw new CustomError("Books not found", StatusCodes.NOT_FOUND);
+    }
     if (rate.length === 0) {
-      res.status(200).json({ rate: 0, book: book });
+      return res.status(200).json({ rate: 0, book: book });
     } else {
       const sum = rate.reduce(
         (accumulator, currentValue) => accumulator + currentValue.value,
@@ -202,22 +229,23 @@ export const getRatingOfBook = async function (
 
       let average = sum / rate.length;
       let roundedAverage = Math.round(average * 10) / 10;
-      res.status(200).json({ rate: roundedAverage, book: book });
+      return res.status(200).json({ rate: roundedAverage, book: book });
     }
   } catch (error) {
-    res.status(404).json({ message: "Такой пользователь уже существует" });
+    next(error);
   }
 };
 
 export const getItemsForAuthorized = async function (
   req: RequestWithUser,
-  res: Response
+  res: Response,
+  next: NextFunction
 ) {
   const { ids, searchQuery } = req.body;
   const user = req.user;
   const page = req.body.page;
   const take = 8;
-  const prices = req.body.prices
+  const prices = req.body.prices;
   const startIndex = isNaN(page) ? 0 : (page - 1) * take;
   const endIndex = startIndex + take;
   const sortBy: "Price" | "Name" | "Author_name" | "Rating" | "Date_of_issue" =
@@ -425,7 +453,7 @@ export const getItemsForAuthorized = async function (
     }
 
     const filterByPrice = sortedData.filter(
-      (book) => book.price >= prices[0] && book.price <= (prices[1] * 100)
+      (book) => book.price >= prices[0] && book.price <= prices[1] * 100
     );
 
     const filteredResults = filterByPrice.filter(
@@ -439,13 +467,14 @@ export const getItemsForAuthorized = async function (
 
     res.status(200).json({ allBooks, totalCount, totalPages });
   } catch (error) {
-    res.status(404).json({ message: "Такой пользователь уже существует" });
+    next(error);
   }
 };
 
 export const addBookToFavorites = async function (
   req: RequestWithUser,
-  res: Response
+  res: Response,
+  next: NextFunction
 ) {
   const { bookId } = req.body;
   try {
@@ -454,13 +483,20 @@ export const addBookToFavorites = async function (
         userId: req.user,
       },
     });
-
+    if (!favoritesOfUser) {
+      throw new CustomError(
+        "User deleted, pls try this on new profile",
+        StatusCodes.NOT_FOUND
+      );
+    }
     const book = await bookRepo.findOne({
       where: {
         id: bookId,
       },
     });
-
+    if (!book) {
+      throw new CustomError("Book not found", StatusCodes.NOT_FOUND);
+    }
     const itsFavoritesBook = await favBookRepo.findOne({
       where: { book: book, favorites: favoritesOfUser },
     });
@@ -486,14 +522,14 @@ export const addBookToFavorites = async function (
       });
     }
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Произошла ошибка при обработке запроса" });
+    next(error);
   }
 };
 
 export const addBookToCart = async function (
   req: RequestWithUser,
-  res: Response
+  res: Response,
+  next: NextFunction
 ) {
   const { bookId, count } = req.body;
   try {
@@ -508,7 +544,9 @@ export const addBookToCart = async function (
         id: bookId,
       },
     });
-
+    if (!book) {
+      throw new CustomError("Book not found", StatusCodes.NOT_FOUND);
+    }
     const itsCartBook = await cartBookRepo.findOne({
       where: { book: book, cart: cartOfUser },
       relations: ["book", "cart"],
@@ -540,14 +578,14 @@ export const addBookToCart = async function (
     await cartBookRepo.save(itsCartBook);
     return res.status(200).json(itsCartBook);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Произошла ошибка при обработке запроса" });
+    next(error);
   }
 };
 
 export const getBooksOfCarts = async function (
   req: RequestWithUser,
-  res: Response
+  res: Response,
+  next: NextFunction
 ) {
   try {
     const cartOfUser = await cartRepo.findOne({
@@ -555,11 +593,16 @@ export const getBooksOfCarts = async function (
         userId: req.user,
       },
     });
+    if (!cartOfUser) {
+      throw new CustomError("User deleted, pls create new profile", StatusCodes.NOT_FOUND);
+    }
     const booksIdandCountInCart = await cartBookRepo.find({
       where: { cart: cartOfUser },
       relations: ["book"],
     });
-
+if (!booksIdandCountInCart) {
+  throw new CustomError("Books not found", StatusCodes.NOT_FOUND);
+}
     const finallyBooks = [];
 
     const booksCart = await Promise.all(
@@ -582,14 +625,14 @@ export const getBooksOfCarts = async function (
     );
     res.status(200).json(finallyBooks);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Произошла ошибка при обработке запроса" });
+    next(error);
   }
 };
 
 export const getUserRatingCurrentBook = async function (
   req: RequestWithUser,
-  res: Response
+  res: Response,
+  next: NextFunction
 ) {
   const user = req.user;
   const bookId = Number(req.query.bookId);
@@ -612,12 +655,15 @@ export const getUserRatingCurrentBook = async function (
       rate: rateOfBook.value,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Произошла ошибка при обработке запроса" });
+    next(error);
   }
 };
 
-export const newComment = async function (req: RequestWithUser, res: Response) {
+export const newComment = async function (
+  req: RequestWithUser,
+  res: Response,
+  next: NextFunction
+) {
   try {
     const today = new Date();
     const book = await bookRepo.findOne({
@@ -625,7 +671,9 @@ export const newComment = async function (req: RequestWithUser, res: Response) {
         id: req.body.bookId,
       },
     });
-
+    if (!book) {
+      throw new CustomError("Book not found", StatusCodes.NOT_FOUND);
+    }
     const newCom = commentRepo.create({
       value: req.body.text,
       user: req.user,
@@ -665,13 +713,14 @@ export const newComment = async function (req: RequestWithUser, res: Response) {
       timeAgo: timeAgo,
     });
   } catch (error) {
-    res.status(404).json({ message: "Такой пользователь уже существует" });
+    next(error);
   }
 };
 
 export const getCommentForCurrentBook = async function (
   req: RequestWithUser,
-  res: Response
+  res: Response,
+  next: NextFunction
 ) {
   try {
     const today = new Date();
@@ -682,7 +731,7 @@ export const getCommentForCurrentBook = async function (
       relations: ["book", "user"],
     });
     if (comments.length === 0) {
-      res.status(200).json([]);
+      return res.status(200).json([]);
     } else {
       const allComments = comments.map((comment) => {
         let timeAgo: string;
@@ -717,13 +766,14 @@ export const getCommentForCurrentBook = async function (
       res.status(200).json(allComments);
     }
   } catch (error) {
-    res.status(404).json({ message: "Такой пользователь уже существует" });
+    next(error);
   }
 };
 
 export const getRecommendations = async function (
   req: RequestWithUser,
-  res: Response
+  res: Response,
+  next: NextFunction
 ) {
   try {
     const book = await bookRepo.findOne({
@@ -732,6 +782,9 @@ export const getRecommendations = async function (
       },
       relations: ["genre"],
     });
+    if (!book) {
+      throw new CustomError("Book not found", StatusCodes.NOT_FOUND);
+    }
     const genres = await genreRepo.find({
       where: { genre: book.genre },
     });
@@ -796,13 +849,14 @@ export const getRecommendations = async function (
       .slice(0, 4);
     res.status(200).json(sortedData);
   } catch (error) {
-    res.status(404).json({ message: "Такой пользователь уже существует" });
+    next(error);
   }
 };
 
 export const getRecommendationsForAuth = async function (
   req: RequestWithUser,
-  res: Response
+  res: Response,
+  next: NextFunction
 ) {
   const user = req.user;
   try {
@@ -812,6 +866,9 @@ export const getRecommendationsForAuth = async function (
       },
       relations: ["genre"],
     });
+    if (!book) {
+      throw new CustomError("Book not found", StatusCodes.NOT_FOUND);
+    }
     const genres = await genreRepo.find({
       where: { genre: book.genre },
     });
@@ -892,196 +949,6 @@ export const getRecommendationsForAuth = async function (
     const sortedData = result.sort((a, b) => b.average - a.average).slice(0, 4);
     res.status(200).json(sortedData);
   } catch (error) {
-    res.status(404).json({ message: "Такой пользователь уже существует" });
+    next(error);
   }
 };
-
-// export const getItemsWithGenre = async function (req: Request, res: Response) {
-//   const { ids, searchQuery } = req.body;
-//   const page = req.body.page;
-//   const take = 4;
-//   const prices = req.body.prices;
-//   const startIndex = isNaN(page) ? 0 : (page - 1) * take;
-//   const endIndex = startIndex + take;
-//   const sortBy: "Price" | "Name" | "Author_name" | "Rating" | "Date_of_issue" =
-//     req.body.sortBy;
-//   try {
-//     if (!ids[0]) {
-//       const books = await bookRepo.find({
-//         where: {
-//           price: Between(prices[0], prices[1]),
-//         },
-//         relations: ["rates", "genre", "auth"],
-//       });
-
-//       let booksWithRateAndHolders = [];
-//       for (let i = 0; i < books.length; i++) {
-//         const book = books[i];
-
-//         const rate = await rateRepo.findBy({ book: { id: book.id } });
-//         const sum = rate.reduce(
-//           (accumulator, currentValue) => accumulator + currentValue.value,
-//           0
-//         );
-//         let average = Math.round(sum / rate.length);
-//         if (!average) {
-//           average = 0;
-//         }
-
-//         const defaultBook = {
-//           bookId: book.id,
-//           title: book.title,
-//           description: book.description,
-//           price: book.price,
-//           author: book.auth?.author_name,
-//           liked: book.liked,
-//           average: average,
-//           date: book.date,
-//           cover: book.cover,
-//         };
-//         booksWithRateAndHolders.push(defaultBook);
-//       }
-
-//       let sortedData = [];
-//       switch (sortBy) {
-//         case "Price":
-//           sortedData = booksWithRateAndHolders
-//             .slice()
-//             .sort(sortByField("price"));
-//           break;
-//         case "Name":
-//           sortedData = booksWithRateAndHolders
-//             .slice()
-//             .sort(sortByField("title"));
-//           break;
-//         case "Author_name":
-//           sortedData = booksWithRateAndHolders
-//             .slice()
-//             .sort(sortByField("author"));
-//           break;
-//         case "Rating":
-//           sortedData = booksWithRateAndHolders
-//             .slice()
-//             .sort(sortByField("average"));
-//           break;
-//         case "Date_of_issue":
-//           sortedData = booksWithRateAndHolders
-//             .slice()
-//             .sort(sortByField("date"));
-//           break;
-//         default:
-//           sortedData = booksWithRateAndHolders
-//             .slice()
-//             .sort(sortByField("price"));
-//           break;
-//       }
-
-//       const filteredResults = sortedData.filter(
-//         (book) =>
-//           book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-//           book.author?.toLowerCase().includes(searchQuery.toLowerCase())
-//       );
-
-//       const allBooks = filteredResults.slice(startIndex, endIndex);
-//       const totalCount = filteredResults.length;
-//       const totalPages = Math.ceil(filteredResults.length / take);
-
-//       return res.status(200).json({ allBooks, totalCount, totalPages });
-//     }
-
-//     const filterPromise = ids.map(async (id) => {
-//       const filter = await bookGenreRepo.find({
-//         where: {
-//           genres: { id: id },
-//         },
-//         relations: { booksId: true },
-//       });
-//       return filter;
-//     });
-//     const genreFilters = (await Promise.all(filterPromise)).flat();
-
-//     const uniqueBooksId = [];
-//     const FILTER = genreFilters.filter((filter) => {
-//       if (!uniqueBooksId.includes(filter.booksId.id)) {
-//         uniqueBooksId.push(filter.booksId.id);
-//         return true;
-//       }
-//       return false;
-//     });
-
-//     const filteredAllBooksPromises = FILTER.map(async (ids) => {
-//       const id = ids.id;
-//       const filtered = await bookRepo.findOne({
-//         where: {
-//           genre: { id: id },
-//         },
-//         relations: { auth: true },
-//         select: {
-//           auth: { author_name: true },
-//         },
-//       });
-//       const rate = await rateRepo.findBy({ book: { id: filtered.id } });
-//       const sum = rate.reduce(
-//         (accumulator, currentValue) => accumulator + currentValue.value,
-//         0
-//       );
-//       let average = Math.round(sum / rate.length);
-//       if (!average) {
-//         average = 0;
-//       }
-//       const finallyBook = {
-//         bookId: filtered.id,
-//         title: filtered.title,
-//         description: filtered.description,
-//         price: filtered.price,
-//         author: filtered.auth?.author_name,
-//         liked: filtered.liked,
-//         average,
-//         date: filtered.date,
-//         cover: filtered.cover,
-//       };
-//       return finallyBook;
-//     });
-//     const filteredAllBooks = await Promise.all(filteredAllBooksPromises);
-
-//     let sortedData = [];
-//     switch (sortBy) {
-//       case "Price":
-//         sortedData = filteredAllBooks.slice().sort(sortByField("price"));
-//         break;
-//       case "Name":
-//         sortedData = filteredAllBooks.slice().sort(sortByField("title"));
-//         break;
-//       case "Author_name":
-//         sortedData = filteredAllBooks.slice().sort(sortByField("author"));
-//         break;
-//       case "Rating":
-//         sortedData = filteredAllBooks.slice().sort(sortByField("average"));
-//         break;
-//       case "Date_of_issue":
-//         sortedData = filteredAllBooks.slice().sort(sortByField("date"));
-//         break;
-//       default:
-//         sortedData = filteredAllBooks.slice().sort(sortByField("price"));
-//         break;
-//     }
-
-//     const filterByPrice = sortedData.filter(
-//       (book) => book.price >= prices[0] && book.price <= prices[1]
-//     );
-
-//     const filteredResults = filterByPrice.filter(
-//       (book) =>
-//         book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-//         book.author?.toLowerCase().includes(searchQuery.toLowerCase())
-//     );
-
-//     const allBooks = filteredResults.slice(startIndex, endIndex);
-//     const totalCount = filteredResults.length;
-//     const totalPages = Math.ceil(filteredResults.length / take);
-
-//     res.status(200).json({ allBooks, totalCount, totalPages });
-//   } catch (error) {
-//     res.status(404).json({ message: "Такой пользователь уже существует" });
-//   }
-// };

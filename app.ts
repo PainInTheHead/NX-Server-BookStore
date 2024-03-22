@@ -3,6 +3,7 @@ import * as express from "express";
 import { myDataSource } from "./app-data-source";
 import mainRoute from "./src/routes/appRoute";
 import { Request, Response } from "express";
+import { errorHandler } from "./src/midleware/errorHandler";
 const path = require("path");
 const cors = require("cors");
 
@@ -20,6 +21,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static("public"));
+app.use(errorHandler);
 app.use("/uploads", express.static(path.join(__dirname, "src", "uploads")));
 app.use("/covers", express.static(path.join(__dirname, "src", "covers")));
 app.use("/", mainRoute);
