@@ -1,33 +1,37 @@
 import { Genre } from "../entity/genre.entity";
-import { User } from "../entity/user.entity";
 import { myDataSource } from "./../../app-data-source";
-import { Request, Response, json } from "express";
-import { RequestWithUser } from "../Types/req.user";
-import { Book } from "../entity/book.entity";
-const bookRepo = myDataSource.getRepository(Book);
+import { NextFunction, Request, Response, json } from "express";
 const genreRepo = myDataSource.getRepository(Genre);
 
-export const createGenre = async function (req: Request, res: Response) {
+export const createGenre = async function (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
   const { name } = req.body;
   try {
-    const genre = await genreRepo.create({
+    const genre = genreRepo.create({
       name: name,
     });
     await genreRepo.save(genre);
     res.status(200).json(genre);
   } catch (error) {
     console.error(error);
-    res.status(404).json({ message: "Такой пользователь уже существует" });
+    res.status(404).json({ message: "Use a different genre name" });
   }
 };
 
 
-export const getGenres = async function(req: Request, res: Response) {
+export const getGenres = async function (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
   try {
-    const genres = await genreRepo.find()
-    res.status(200).json(genres)
+    const genres = await genreRepo.find();
+    res.status(200).json(genres);
   } catch (error) {
     console.error(error);
-    res.status(404).json({ message: "Такой пользователь уже существует" });
+    next(error);
   }
 };

@@ -130,7 +130,7 @@ export const userMakeAva = async function (
     }
     user.avatar = avatar;
     await myDataSource.getRepository(User).save(user);
-    res.status(200).json({ message: "Аватар изменен" });
+    res.status(200).json({ message: "Avatar changed" });
   } catch (error) {
      next(error);
   }
