@@ -19,8 +19,8 @@ const router = Router();
 router.post("/registration", userRegister);
 router.post("/login", userLogin);
 router.get("/userinfo", verifyToken, getUser);
-router.put("/changeAboutUser", verifyToken, changeInfoAboutUser);
-router.put("/changePasswordUser", verifyToken, changePasswordUser);
-router.post("/upload", verifyToken, upload.single("file"), userFormDataAvatar);
+router.put("/change/information", verifyToken, changeInfoAboutUser);
+router.put("/change/password", verifyToken, changePasswordUser);
+router.post("/upload/avatar", verifyToken, upload.single("file"), userFormDataAvatar);
 
 export default router;

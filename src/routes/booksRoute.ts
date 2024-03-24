@@ -22,25 +22,21 @@ import { verifyUser } from "../midleware/getUser";
 
 const router = Router();
 
-router.post("/createGenre", createGenre);
-router.post("/booksCreate", bookCreate);
-router.get("/getitems", getItems);
-router.post("/changeRatingOfBook", verifyToken, changeRatingOfBook);
-router.post("/newComment", verifyToken, newComment);
-router.get("/getRatingOfBook", getRatingOfBook);
-router.get("/getCommentForCurrentBook", getCommentForCurrentBook);
-router.post("/addBookToFavorites", verifyToken, addBookToFavorites);
-router.post("/addBookToCart", verifyToken, addBookToCart);
-router.post("/getItemsForAuthorized", verifyUser, getItemsForAuthorized);
-router.get("/getUserRatingCurrentBook", verifyToken, getUserRatingCurrentBook);
-router.get("/getBooksOfCarts", verifyToken, getBooksOfCarts);
-router.post("/getRecommendations", getRecommendations);
-router.post(
-  "/getRecommendationsForAuth",
-  verifyToken,
-  getRecommendationsForAuth
-);
-router.get("/getCurrentBook/:id", getCurrentBook);
-router.get("/getGenres", getGenres);
+router.post("/genres", createGenre);
+router.post("/book", bookCreate);
+router.get("/items", getItems);
+router.post("/change/rating", verifyToken, changeRatingOfBook);
+router.post("/comment", verifyToken, newComment);
+router.get("/rating", getRatingOfBook);
+router.get("/comment", getCommentForCurrentBook);
+router.post("/favorites", verifyToken, addBookToFavorites);
+router.post("/cart", verifyToken, addBookToCart);
+router.post("/filtered", verifyUser, getItemsForAuthorized);
+router.get("/rate", verifyToken, getUserRatingCurrentBook);
+router.get("/cart", verifyToken, getBooksOfCarts);
+router.post("/recommendation", getRecommendations);
+router.post("/recommendation/foruser", verifyToken, getRecommendationsForAuth);
+router.get("/book/:id", getCurrentBook);
+router.get("/genres", getGenres);
 
 export default router;
