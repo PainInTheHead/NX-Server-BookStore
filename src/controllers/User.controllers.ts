@@ -175,14 +175,14 @@ export const changeInfoAboutUser = async function (
   next: NextFunction
 ) {
   const userId = req.user.id;
-  const { Email, UserName } = req.body;
+  const { email, userName } = req.body;
   try {
     const currentUser = await userRepo.findOneBy({ id: userId });
     if (!currentUser) {
       throw new CustomError("Authorisation Error", StatusCodes.UNAUTHORIZED);
     }
-    currentUser.email = Email;
-    currentUser.userName = UserName;
+    currentUser.email = email;
+    currentUser.userName = userName;
     await userRepo.save(currentUser);
     res
       .status(200)
@@ -198,7 +198,7 @@ export const changePasswordUser = async function (
   next: NextFunction
 ) {
   const userId = req.user.id;
-  const { Password, oldPassword } = req.body;
+  const { password, oldPassword } = req.body;
 
   try {
     const currentUser = await userRepo.findOneBy({ id: userId });
@@ -212,9 +212,9 @@ export const changePasswordUser = async function (
         StatusCodes.BAD_REQUEST
       );
     }
-    currentUser.password = bcrypt.hashSync(Password, salt);
+    currentUser.password = bcrypt.hashSync(password, salt);
     await userRepo.save(currentUser);
-    res.status(200).json({ Password: Password });
+    res.status(200).json({ password: password });
   } catch (error) {
     next(error);
   }
