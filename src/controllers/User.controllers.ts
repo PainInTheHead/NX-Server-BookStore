@@ -11,7 +11,6 @@ const path = require("path");
 import { StatusCodes } from "http-status-codes";
 import { CustomError } from "../midleware/errorHandler";
 
-
 const userRepo = myDataSource.getRepository(User);
 const favoriteRepo = myDataSource.getRepository(Favorites);
 const cartRepo = myDataSource.getRepository(Cart);
@@ -66,14 +65,17 @@ export const userLogin = async function (
   try {
     const user = await userRepo.findOneBy({ email: email });
     if (!user) {
-     throw new CustomError("This user does not exist", StatusCodes.BAD_REQUEST);
+      throw new CustomError(
+        "This user does not exist",
+        StatusCodes.BAD_REQUEST
+      );
     }
     const decryptPass = bcrypt.compareSync(password, user.password);
     if (!decryptPass) {
-       throw new CustomError(
-         "Invalid authentication details",
-         StatusCodes.BAD_REQUEST
-       );
+      throw new CustomError(
+        "Invalid authentication details",
+        StatusCodes.BAD_REQUEST
+      );
     }
     const token = jwt.sign(
       {
@@ -86,7 +88,7 @@ export const userLogin = async function (
 
     const favorites = await favoriteRepo.findOne({ where: { userId: user } });
     return res.status(200).json({
-      token: `Bearer ${token}`,
+      token: token,
       id: user.id,
       avatar: user.avatar,
       userName: user.userName,
@@ -94,7 +96,7 @@ export const userLogin = async function (
       favorites: favorites.id,
     });
   } catch (error) {
-     next(error);
+    next(error);
   }
 };
 
@@ -132,7 +134,7 @@ export const userMakeAva = async function (
     await myDataSource.getRepository(User).save(user);
     res.status(200).json({ message: "Avatar changed" });
   } catch (error) {
-     next(error);
+    next(error);
   }
 };
 
@@ -145,7 +147,7 @@ export const userFormDataAvatar = async function (
     const userFromToken = req.user;
     const user = await userRepo.findOneBy({ id: userFromToken.id });
     if (!user) {
-       throw new CustomError("Authorisation Error", StatusCodes.UNAUTHORIZED);
+      throw new CustomError("Authorisation Error", StatusCodes.UNAUTHORIZED);
     }
     const oldAvatarPath = user.avatar;
     user.avatar = req.file.filename;
@@ -186,7 +188,7 @@ export const changeInfoAboutUser = async function (
       .status(200)
       .json({ email: currentUser.email, userName: currentUser.userName });
   } catch (error) {
-   next(error)
+    next(error);
   }
 };
 
@@ -205,10 +207,10 @@ export const changePasswordUser = async function (
     }
     const decryptPass = bcrypt.compareSync(oldPassword, currentUser.password);
     if (!decryptPass) {
-     throw new CustomError(
-       "The old password is incorrect",
-       StatusCodes.BAD_REQUEST
-     );;
+      throw new CustomError(
+        "The old password is incorrect",
+        StatusCodes.BAD_REQUEST
+      );
     }
     currentUser.password = bcrypt.hashSync(Password, salt);
     await userRepo.save(currentUser);

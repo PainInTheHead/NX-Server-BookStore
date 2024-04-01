@@ -26,12 +26,6 @@ app.use("/uploads", express.static(path.join(__dirname, "src", "uploads")));
 app.use("/covers", express.static(path.join(__dirname, "src", "covers")));
 app.use("/", mainRoute);
 
-// app.post(
-//   "/upload",
-//   upload.single("file"),
-//   async (req: Request, res: Response) => {
-//     res.json({ filename: req.file.filename });
-//   }
-// );
+
 
 app.listen(3005);
