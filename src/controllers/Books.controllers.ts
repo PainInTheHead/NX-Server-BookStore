@@ -16,6 +16,7 @@ import { CartBook } from "../entity/cart_book.entity";
 import { Comments } from "../entity/comments.entity";
 import { CustomError } from "../midleware/errorHandler";
 import { StatusCodes } from "http-status-codes";
+import { io } from "../../app";
 const bookRepo = myDataSource.getRepository(Book);
 const bookGenreRepo = myDataSource.getRepository(GenreBook);
 const genreRepo = myDataSource.getRepository(Genre);
@@ -704,6 +705,8 @@ export const newComment = async function (
       const diffDays = Math.ceil(diffMinutes / 60 / 24);
       timeAgo = `${diffDays} ${diffDays === 1 ? "день" : "дня"} назад`;
     }
+
+    // io.emit('newComment', book.id);
 
     res.status(200).json({
       id: newCom.id,
